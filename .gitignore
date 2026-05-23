@@ -1,0 +1,43 @@
+# Secrets & Credentials
+.env
+ssl/
+plus.lic
+*.lic
+tools/.env.license
+tools/.license_counter
+*.key
+*.crt
+*.pem
+
+# Packer Credentials & SSH-Keys
+packer/credentials.pkr.hcl
+packer/**/files/installuser
+packer/**/files/sysadm
+packer/**/files/sysadm.pub
+packer/**/files/id_ed25519
+
+# Job-Daten & Logs
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+.pytest_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Claude Code
+.claude/settings.local.json
+
+# IDE
+.idea/
+*.swp
+*.swo
+frontend/test-results/

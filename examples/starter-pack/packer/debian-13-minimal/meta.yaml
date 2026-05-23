@@ -1,0 +1,29 @@
+name: "Debian 13 minimal"
+description: "Build a small Debian 13 cloud-init template. Starter-pack example using netinst ISO + minimal preseed."
+required_role: "operator"
+parameters:
+  - id: vm_id
+    label: "Template VM ID"
+    type: integer
+    required: true
+    min: 100
+    max: 999999
+    default: 9000
+  - id: node
+    label: "Proxmox node"
+    type: string
+    required: true
+  - id: storage_pool
+    label: "Storage pool (e.g. local-lvm, local-zfs, your-zfs-pool)"
+    type: string
+    required: true
+  - id: iso_file
+    label: "ISO file (Proxmox path)"
+    type: string
+    required: false
+    default: "local:iso/debian-13.4.0-amd64-netinst.iso"
+  - id: bridge
+    label: "Network bridge"
+    type: string
+    required: false
+    default: "vmbr0"

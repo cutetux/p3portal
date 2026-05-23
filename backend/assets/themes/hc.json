@@ -1,0 +1,27 @@
+{
+  "name": "High Contrast",
+  "author": "p3portal.org",
+  "version": "1.0",
+  "variables": {
+    "--sidebar":     "#000000",
+    "--bg":          "#000000",
+    "--bg2":         "#0d0d0d",
+    "--bg3":         "#1a1a1a",
+    "--border":      "#ffffff",
+    "--border2":     "#cccccc",
+    "--text":        "#ffffff",
+    "--text2":       "#eeeeee",
+    "--text3":       "#cccccc",
+    "--white":       "#ffffff",
+    "--accent":      "#ffff00",
+    "--green":       "#00ff7f",
+    "--orange":      "#ff8c00",
+    "--blue":        "#00bfff",
+    "--purple":      "#da70d6",
+    "--red":         "#ff4444",
+    "--yellow":      "#ffff00",
+    "--font":        "'Inter', sans-serif",
+    "--radius-card": "0px",
+    "--radius-btn":  "0px"
+  }
+}

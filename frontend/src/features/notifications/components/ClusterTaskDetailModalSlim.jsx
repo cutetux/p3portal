@@ -1,0 +1,55 @@
+// p3portal.org
+// PROJ-65: Slim-Modal für Cluster-Task-Details im Hub
+import { useTranslation } from 'react-i18next'
+import { SEVERITY_DOT } from '../severity'
+
+export default function ClusterTaskDetailModalSlim({ item, onClose }) {
+  const { t } = useTranslation()
+  if (!item) return null
+
+  const dotCls = SEVERITY_DOT[item.severity] ?? SEVERITY_DOT.info
+  const upid = item.meta?.upid ?? item.source_id.replace('cluster_task:', '')
+  const status = item.meta?.status ?? ''
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-portal-card rounded-xl shadow-xl w-full max-w-lg mx-4 border border-portal-border"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-portal-border">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full bg-current ${dotCls}`} />
+            <h2 className="text-sm font-semibold text-portal-text">
+              {t('notifications.detail_cluster_task')}
+            </h2>
+          </div>
+          <button onClick={onClose} className="btn-ghost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-sm font-medium text-portal-text">{item.title}</p>
+          {item.summary && (
+            <p className="text-xs text-portal-text2">{item.summary}</p>
+          )}
+          {upid && (
+            <div className="text-xs text-portal-text3 font-mono bg-portal-bg3/50 px-3 py-2 rounded break-all">
+              {upid}
+            </div>
+          )}
+          {status && (
+            <p className="text-xs text-portal-text2">
+              Status: <span className="font-medium">{status}</span>
+            </p>
+          )}
+          <p className="text-xs text-portal-text3">
+            {new Date(item.created_at).toLocaleString()}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}

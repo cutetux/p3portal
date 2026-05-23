@@ -1,0 +1,59 @@
+networks:
+  portal-net:
+    driver: bridge
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    networks:
+      - portal-net
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+  celery-worker:
+    image: ghcr.io/p3portal-org/p3portal:latest
+    restart: unless-stopped
+    networks:
+      - portal-net
+    command: celery -A backend.celery_app worker --beat -l info
+    env_file:
+      - .env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - VALKEY_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      - ./ansible:/app/ansible
+      - ./packer:/app/packer
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    depends_on:
+      - valkey
+
+  portal:
+    image: ghcr.io/p3portal-org/p3portal:latest
+    restart: unless-stopped
+    networks:
+      - portal-net
+    ports:
+      - "8443:8443"
+      - "8103:8103"
+    env_file:
+      - .env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - VALKEY_URL=${VALKEY_URL:-redis://valkey:6379/0}
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      - ./ansible:/app/ansible
+      - ./packer:/app/packer
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    depends_on:
+      - valkey

@@ -1,0 +1,30 @@
+# PROJ-67 Phase 1 – γ: Override-Beispiel für host-Netz und Multicast-Setups.
+#
+# Wenn Packer-Builds HTTP-Preseed-Server (Port 8103) direkt erreichbar sein
+# müssen oder Multicast-Proxmox-HA-Traffic Bridge-Isolierung umgeht,
+# kann dieses Override aktiviert werden:
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   # Anpassen und dann:
+#   docker compose up -d
+#
+# HINWEIS: host-Netz entfernt die Bridge-Isolierung. Nur in vertrauenswürdigen
+# LAN/VPN-Umgebungen verwenden.
+
+services:
+  valkey:
+    network_mode: host
+    networks: !reset null
+
+  celery-worker:
+    network_mode: host
+    networks: !reset null
+    environment:
+      - VALKEY_URL=redis://localhost:6379/0
+
+  portal:
+    network_mode: host
+    networks: !reset null
+    ports: !reset []
+    environment:
+      - VALKEY_URL=redis://localhost:6379/0

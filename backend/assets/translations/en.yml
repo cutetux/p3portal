@@ -1,0 +1,68 @@
+_lang_code: en
+_lang_name: English
+sidebar:
+  dashboard: Dashboard
+  playbooks: Playbooks
+  jobs: Jobs
+  builder: Template Builder
+  administration: Administration
+  users: User Management
+  settings: Settings
+  permissions: Permissions
+  logout: Sign out
+  soon: soon
+profile:
+  title: My Profile
+  tabs:
+    overview: Overview
+    security: Security
+    ssh: SSH Key
+    sessions: Sessions
+    appearance: Appearance
+admin:
+  settings:
+    title: Settings
+    appearance_section: Appearance & Language
+appearance:
+  theme_tab: Themes
+  language_tab: Languages
+  theme_label: Theme
+  language_label: Language
+  portal_default: Portal Default
+  set_as_default: Set Default
+  current_default: Default
+  builtin: Built-in
+  custom: Custom
+  upload_theme: Upload Theme
+  upload_lang: Upload Language
+  uploading: "Uploading…"
+  delete: Delete
+  cancel: Cancel
+  save: Save
+  no_plus: Plus license required
+  theme_saved: Theme saved
+  lang_saved: Language saved
+  default_set: Default set
+  deleted: Deleted
+  upload_theme_hint: JSON file with CSS variables, max. 100 KB
+  upload_lang_hint: YAML file in namespace format, max. 500 KB
+  no_themes: No themes found
+  no_languages: No languages found
+  my_theme: My Theme
+  my_language: My Language
+  global_default_label: Global Default
+  select_theme: Select theme
+  select_language: Select language
+  appearance_title: Appearance
+common:
+  save: Save
+  cancel: Cancel
+  delete: Delete
+  upload: Upload
+  loading: "Loading…"
+  error: Error
+  success: Success
+  close: Close
+  confirm: Confirm
+  optional: "optional"
+  saving: "Saving…"

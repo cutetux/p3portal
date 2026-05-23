@@ -1,0 +1,60 @@
+name: "Clone VM (basic)"
+description: "Clone a cloud-init template into a new VM and configure IP + SSH key. Starter-pack example."
+playbook: "vm-clone-basic.yml"
+required_role: "PVEVMAdmin"
+category: "vm_deployment"
+parameters:
+  - id: vm_name
+    label: "VM name"
+    type: string
+    required: true
+  - id: vm_id
+    label: "VM ID"
+    type: integer
+    required: true
+    min: 100
+    max: 999999
+  - id: proxmox_node
+    label: "Proxmox node"
+    type: proxmox_node
+    required: true
+  - id: tmpl_vmid
+    label: "Source template"
+    type: proxmox_template
+    required: true
+  - id: vm_cores
+    label: "CPU cores"
+    type: integer
+    required: true
+    default: 2
+    min: 1
+    max: 32
+  - id: vm_mem
+    label: "RAM (MB)"
+    type: integer
+    required: true
+    default: 2048
+    min: 512
+    max: 65536
+  - id: vm_ipconfig
+    label: "Network (cloud-init)"
+    type: ip_config
+    required: true
+    default: "ip=dhcp"
+  - id: vm_ssh_key
+    label: "SSH public key for root (optional if password is set)"
+    type: ssh_key
+    required: false
+  - id: vm_password
+    label: "Root password (optional if SSH key is set)"
+    type: password
+    required: false
+presets:
+  - label: "Small (2 cores, 2 GB)"
+    values:
+      vm_cores: 2
+      vm_mem: 2048
+  - label: "Medium (4 cores, 4 GB)"
+    values:
+      vm_cores: 4
+      vm_mem: 4096

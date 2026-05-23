@@ -1,0 +1,128 @@
+# P3 Portal starter pack: clone a cloud-init template, set IP + SSH key, start.
+#
+# Extravars injected by the portal backend:
+#   proxmox_api_base_url, proxmox_portal_user, proxmox_portal_realm,
+#   proxmox_portal_token_name, proxmox_portal_token_secret
+# Plus the parameters defined in meta.yaml.
+---
+- name: Clone VM from template
+  hosts: localhost
+  gather_facts: false
+  vars:
+    api_base: "{{ proxmox_api_base_url }}"
+    api_auth: "PVEAPIToken={{ proxmox_portal_user }}@{{ proxmox_portal_realm }}!{{ proxmox_portal_token_name }}={{ proxmox_portal_token_secret }}"
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined and vm_name | length > 0
+          - vm_id is defined
+          - proxmox_node is defined and proxmox_node | length > 0
+          - tmpl_vmid is defined
+          - (vm_ssh_key | default('') | length > 0) or (vm_password | default('') | length > 0)
+        fail_msg: "At least one of vm_ssh_key or vm_password must be set."
+
+    - name: Clone template
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ tmpl_vmid }}/clone"
+        method: POST
+        headers:
+          Authorization: "{{ api_auth }}"
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: form-urlencoded
+        body: "newid={{ vm_id }}&name={{ vm_name }}&target={{ proxmox_node }}&full=1"
+        validate_certs: false
+        status_code: 200
+
+    - name: Wait for clone to release the Proxmox VM lock
+      # Proxmox keeps lock=clone on the new VM during the copy. Polling
+      # /status/current and waiting until 'lock' disappears is more reliable
+      # than a fixed pause — large templates / slow storage easily exceed 15 s.
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/status/current"
+        method: GET
+        headers:
+          Authorization: "{{ api_auth }}"
+        validate_certs: false
+        status_code: 200
+      register: vm_status
+      until: vm_status.json.data.lock is not defined
+      retries: 60
+      delay: 5
+
+    - name: Set CPU and memory
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ api_auth }}"
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: form-urlencoded
+        body: "cores={{ vm_cores }}&memory={{ vm_mem }}"
+        validate_certs: false
+        status_code: 200
+
+    - name: Set cloud-init IP config
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ api_auth }}"
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: form-urlencoded
+        body: "ipconfig0={{ vm_ipconfig | urlencode }}"
+        validate_certs: false
+        status_code: 200
+
+    - name: Set cloud-init SSH key
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ api_auth }}"
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: form-urlencoded
+        body: "sshkeys={{ vm_ssh_key | trim | urlencode | replace('/', '%2F') }}"
+        validate_certs: false
+        status_code: 200
+      when: vm_ssh_key | default('') | length > 0
+
+    # Pin cloud-init user to root — Proxmox' cloud-init drive ignores
+    # cipassword + sshkeys when ciuser isn't set explicitly (default in some
+    # PVE versions is empty rather than 'root').
+    - name: Set cloud-init ciuser=root
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ api_auth }}"
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: form-urlencoded
+        body:
+          ciuser: "root"
+        validate_certs: false
+        status_code: 200
+
+    # Password path — needs sha512 hash + body_format: raw (Proxmox API quirk).
+    # form-urlencoded reformats $ signs in the hash and silently breaks login.
+    - name: Set cloud-init root password
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ api_auth }}"
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: raw
+        body: "cipassword={{ vm_password | password_hash('sha512') | urlencode }}"
+        validate_certs: false
+        status_code: 200
+      when: vm_password | default('') | length > 0
+
+    - name: Start VM
+      ansible.builtin.uri:
+        url: "{{ api_base }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/status/start"
+        method: POST
+        headers:
+          Authorization: "{{ api_auth }}"
+        validate_certs: false
+        status_code: 200

@@ -1,0 +1,26 @@
+// p3portal.org
+// PROJ-60: Kanonische Liste aller Capability-Keys (muss mit backend/core/plus_protocol.py CAPABILITIES-Dict übereinstimmen)
+// AC-25-Test prüft, dass jeder Schlüssel im Backend-Endpoint vorkommt.
+export const CAPABILITY_KEYS = [
+  'alert_presets',
+  'alerts_smtp',
+  'theme_editor',
+  'multiple_nodes',
+  'default_node',
+  'scheduled_jobs',
+  'language_change',
+  'cluster_resources_packer',
+  'multi_node_dashboard',
+  'api_key_max_count_override',
+  'api_key_scopes_full',
+  'sidebar_pins_extended',
+  'compute_alerting',
+  'compute_scheduled_jobs',
+  'approval_workflow',
+  'help_global_overrides',
+  'pools_quotas',
+  'groups_unlimited',
+  'node_assignments',
+  'owners_unlimited',
+  'playbook_permissions',
+]

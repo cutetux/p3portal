@@ -1,0 +1,161 @@
+/* rootq.de */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-w: 240px;
+  }
+
+  html {
+    background-color: var(--bg, #09090b);
+    color: var(--text, #d4d4d8);
+    font-family: var(--font, 'Inter', sans-serif);
+  }
+}
+
+.rq::after {
+  content: "rootq.de";
+}
+
+/*
+ * Theme bridge: map Tailwind dark:zinc-* classes onto CSS custom properties.
+ * Non-layered rules override @layer utilities (higher cascade position),
+ * so no !important needed. Only fires when html.dark is present.
+ * p3portal.org
+ */
+
+/* backgrounds */
+html.dark .dark\:bg-zinc-950 { background-color: var(--bg); }
+html.dark .dark\:bg-zinc-900 { background-color: var(--sidebar); }
+html.dark .dark\:bg-zinc-800 { background-color: var(--bg2); }
+html.dark .dark\:bg-zinc-700 { background-color: var(--bg3); }
+html.dark .dark\:bg-zinc-600 { background-color: var(--bg3); }
+html.dark .dark\:bg-zinc-500 { background-color: var(--bg3); }
+
+/* borders */
+html.dark .dark\:border-zinc-800 { border-color: var(--border); }
+html.dark .dark\:border-zinc-700 { border-color: var(--border); }
+html.dark .dark\:border-zinc-600 { border-color: var(--border2); }
+
+/* text */
+html.dark .dark\:text-zinc-100 { color: var(--white); }
+html.dark .dark\:text-zinc-200 { color: var(--white); }
+html.dark .dark\:text-zinc-300 { color: var(--text); }
+html.dark .dark\:text-zinc-400 { color: var(--text2); }
+html.dark .dark\:text-zinc-500 { color: var(--text3); }
+html.dark .dark\:text-zinc-600 { color: var(--text3); }
+html.dark .dark\:text-zinc-700 { color: var(--text3); }
+
+/*
+ * Radius bridge: map common Tailwind rounded-* classes to theme vars.
+ * html prefix raises specificity to 0,1,1 – beats Tailwind's 0,1,0.
+ * --radius-card controls cards, panels, modals, dropdowns.
+ * --radius-btn  controls buttons, badges, inputs, tags.
+ */
+html .rounded-xl  { border-radius: var(--radius-card, 12px); }
+html .rounded-lg  { border-radius: var(--radius-card, 8px); }
+html .rounded-md  { border-radius: var(--radius-btn, 6px); }
+html .rounded     { border-radius: var(--radius-btn, 4px); }
+html .rounded-sm  { border-radius: var(--radius-btn, 2px); }
+
+/*
+ * Divider bridge: <hr> and horizontal separators use theme border color.
+ * Optional --divider-color overrides --border for finer control.
+ */
+html hr {
+  border-color: var(--divider-color, var(--border, #3f3f46));
+  border-top-width: 1px;
+  border-bottom-width: 0;
+}
+
+/*
+ * Accent divider: elements with class .theme-divider-accent get a
+ * colored top stripe using --accent. Use in theme JSON via --divider-accent.
+ */
+html .theme-divider-accent {
+  border-top: 2px solid var(--divider-accent, var(--accent));
+}
+
+/*
+ * Button system – p3portal.org
+ *
+ * Alle interaktiven Buttons MÜSSEN eine dieser Klassen tragen.
+ * border-radius: var(--radius-btn) → greift das aktive Theme (0px … 8px).
+ * Farben greifen portal-CSS-Variablen: --accent, --red, --border, --text, --bg2.
+ *
+ * btn-primary      Primäraktion (gefüllt, Accent-Farbe)
+ * btn-secondary    Sekundäraktion (Outline, neutral)
+ * btn-danger       Destruktive Aktion (gefüllt, rot)
+ * btn-table        Tabellenzeilen-Aktion, neutral (klein, Outline)
+ * btn-table-danger Tabellenzeilen-Aktion, destruktiv (klein, Outline rot)
+ * btn-ghost        Nur für Icon/Close-Buttons ohne Fläche (X in Modal-Headern)
+ */
+@layer components {
+  .btn-primary {
+    @apply text-sm font-medium px-4 py-2 text-white
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--accent);
+    border-radius: var(--radius-btn, 6px);
+  }
+  .btn-primary:hover:not(:disabled) { filter: brightness(0.88); }
+
+  .btn-secondary {
+    @apply text-sm font-medium px-4 py-2
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    border: 1px solid var(--border);
+    color: var(--text2);
+    border-radius: var(--radius-btn, 6px);
+  }
+  .btn-secondary:hover:not(:disabled) { background-color: var(--bg2); }
+
+  .btn-danger {
+    @apply text-sm font-medium px-4 py-2 text-white
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--red);
+    border-radius: var(--radius-btn, 6px);
+  }
+  .btn-danger:hover:not(:disabled) { filter: brightness(0.88); }
+
+  /* Tabellenzeilen-Aktion: kleiner Outline-Button (analog UserTable) */
+  .btn-table {
+    @apply text-xs px-2 py-1
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    border: 1px solid var(--border);
+    color: var(--text3);
+    border-radius: var(--radius-btn, 4px);
+  }
+  .btn-table:hover:not(:disabled) {
+    border-color: var(--border2);
+    color: var(--text);
+  }
+
+  /* Tabellenzeilen-Aktion destruktiv */
+  .btn-table-danger {
+    @apply text-xs px-2 py-1
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    border: 1px solid var(--border);
+    color: var(--red);
+    border-radius: var(--radius-btn, 4px);
+  }
+  .btn-table-danger:hover:not(:disabled) {
+    border-color: var(--red);
+  }
+
+  /* Nur für Close/Dismiss-Icons (X) – keine Fläche */
+  .btn-ghost {
+    @apply transition-colors;
+    color: var(--text3);
+  }
+  .btn-ghost:hover { color: var(--text2); }
+}
+
+/* Main-content gradient – subtle accent tinge top-left → transparent */
+@layer utilities {
+  .bg-content-gradient {
+    background-image:
+      linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, transparent) 0%, transparent 28%),
+      linear-gradient(315deg, rgba(99, 102, 241, 0.07) 0%, transparent 28%);
+  }
+}

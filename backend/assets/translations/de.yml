@@ -1,0 +1,68 @@
+_lang_code: de
+_lang_name: Deutsch
+sidebar:
+  dashboard: Dashboard
+  playbooks: Playbooks
+  jobs: Jobs
+  builder: Template-Builder
+  administration: Administration
+  users: Nutzerverwaltung
+  settings: Einstellungen
+  permissions: Berechtigungen
+  logout: Abmelden
+  soon: bald
+profile:
+  title: Mein Profil
+  tabs:
+    overview: "Übersicht"
+    security: Sicherheit
+    ssh: SSH-Key
+    sessions: Sessions
+    appearance: Erscheinungsbild
+admin:
+  settings:
+    title: Einstellungen
+    appearance_section: "Erscheinungsbild & Sprache"
+appearance:
+  theme_tab: Themes
+  language_tab: Sprachen
+  theme_label: Theme
+  language_label: Sprache
+  portal_default: Portal-Standard
+  set_as_default: Als Standard
+  current_default: Standard
+  builtin: Eingebaut
+  custom: Benutzerdefiniert
+  upload_theme: Theme hochladen
+  upload_lang: Sprache hochladen
+  uploading: "Wird hochgeladen…"
+  delete: "Löschen"
+  cancel: Abbrechen
+  save: Speichern
+  no_plus: "Plus-Lizenz erforderlich"
+  theme_saved: Theme gespeichert
+  lang_saved: Sprache gespeichert
+  default_set: Standard gesetzt
+  deleted: "Gelöscht"
+  upload_theme_hint: "JSON-Datei mit CSS-Variablen, max. 100 KB"
+  upload_lang_hint: "YAML-Datei im Namespace-Format, max. 500 KB"
+  no_themes: Keine Themes vorhanden
+  no_languages: Keine Sprachen vorhanden
+  my_theme: Mein Theme
+  my_language: Meine Sprache
+  global_default_label: Globaler Standard
+  select_theme: Theme "wahlen"
+  select_language: "Sprache wählen"
+  appearance_title: Erscheinungsbild
+common:
+  save: Speichern
+  cancel: Abbrechen
+  "delete": "Löschen"
+  upload: Hochladen
+  loading: "Wird geladen…"
+  error: Fehler
+  success: Erfolgreich
+  close: "Schließen"
+  confirm: "Bestätigen"
+  optional: "optional"
+  saving: "Wird gespeichert…"

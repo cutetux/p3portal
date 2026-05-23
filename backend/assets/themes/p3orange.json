@@ -1,0 +1,27 @@
+{
+  "name": "P3 Orange",
+  "author": "p3portal.org",
+  "version": "1.0",
+  "variables": {
+    "--sidebar":     "#16181e",
+    "--bg":          "#1e2028",
+    "--bg2":         "#23262f",
+    "--bg3":         "#2a2d38",
+    "--border":      "#2e3140",
+    "--border2":     "#3a3d4d",
+    "--text":        "#c9cdd8",
+    "--text2":       "#8b909f",
+    "--text3":       "#5c6070",
+    "--white":       "#e8eaf0",
+    "--accent":      "#ea580c",
+    "--green":       "#4caf50",
+    "--orange":      "#ea580c",
+    "--blue":        "#3b82f6",
+    "--purple":      "#7c5cbf",
+    "--red":         "#c0392b",
+    "--yellow":      "#eab308",
+    "--font":        "'Inter', sans-serif",
+    "--radius-card": "12px",
+    "--radius-btn":  "8px"
+  }
+}

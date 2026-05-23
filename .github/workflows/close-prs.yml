@@ -1,0 +1,50 @@
+name: Close external Pull Requests
+
+# Diese Repo akzeptiert aktuell keine externen Code-Beiträge.
+# Dieser Workflow schließt jeden eingehenden Pull Request automatisch
+# mit einer höflichen Erklärung. Bug-Reports bitte als Issue.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    # Eigene PRs des Maintainers (Bypass) werden nicht geschlossen.
+    if: github.event.pull_request.user.login != github.repository_owner
+    steps:
+      - name: Close pull request with explanation
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = [
+              "Hallo @" + pr.user.login + ", danke für dein Interesse an P3 Portal!",
+              "",
+              "Dieses Repository nimmt **aktuell keine externen Pull Requests** an.",
+              "Beiträge werden im Moment ausschließlich vom Maintainer eingepflegt.",
+              "",
+              "Wenn du einen Bug gefunden oder eine Idee hast, freue ich mich über ein",
+              "**Issue**: https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/issues",
+              "",
+              "Dieser PR wird daher geschlossen. Das ist nichts Persönliches – siehe README.",
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body
+            });
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              state: "closed"
+            });

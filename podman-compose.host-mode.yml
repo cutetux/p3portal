@@ -1,0 +1,56 @@
+# Podman rootless – network_mode: host
+# Verwendung: podman-compose -f podman-compose.yml up -d
+#
+# Host-Modus ist nötig damit der Packer-HTTP-Server (Port 8103)
+# von Proxmox-VMs während eines Template-Builds erreichbar ist.
+# Packer-HTTP-IP in den System Settings auf die IP dieses Hosts setzen.
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+  celery-worker:
+    image: ghcr.io/p3portal-org/p3portal:latest
+    restart: unless-stopped
+    network_mode: host
+    command: celery -A backend.celery_app worker --beat -l info
+    env_file:
+      - .env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - VALKEY_URL=${VALKEY_URL:-redis://127.0.0.1:6379/0}
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      - ./ansible:/app/ansible
+      - ./packer:/app/packer
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    depends_on:
+      - valkey
+
+  portal:
+    image: ghcr.io/p3portal-org/p3portal:latest
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - VALKEY_URL=${VALKEY_URL:-redis://127.0.0.1:6379/0}
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      - ./ansible:/app/ansible
+      - ./packer:/app/packer
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    depends_on:
+      - valkey

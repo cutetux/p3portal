@@ -1,0 +1,198 @@
+P3 Portal Plus – Proprietary Source-Available License
+======================================================
+
+Copyright (C) 2026 rootq <contact@rootq.de>
+Contact: license@p3portal.org | https://p3portal.org
+
+This license governs all files located in the following directories of
+the P3 Portal repository:
+
+  backend/plus/
+  frontend/src/plus/
+
+including all sub-directories, test files, configuration files, and
+helper scripts therein (collectively "the Plus Code").
+
+───────────────────────────────────────────────────────────────────────
+§ 1  DEFINITIONS
+───────────────────────────────────────────────────────────────────────
+
+"Licensor" means rootq, the copyright holder of the Plus Code.
+"You" means the individual or legal entity accepting this license.
+"Plus License Key" means a valid, individually issued `plus.lic` file
+  obtained from the Licensor that activates Plus features at runtime.
+"Modification" means any alteration to the Plus Code's source files.
+"Redistribution" means any act of making the Plus Code (original or
+  modified) available to a third party in any form.
+
+───────────────────────────────────────────────────────────────────────
+§ 2  GRANT – SOURCE-AVAILABLE RIGHTS
+───────────────────────────────────────────────────────────────────────
+
+Subject to the terms of this license, the Licensor grants You a
+non-exclusive, non-transferable, worldwide right to:
+
+  (a) Read and inspect the Plus Code for evaluation and security-audit
+      purposes.
+  (b) Run the Plus Code as part of the official P3 Portal container
+      image on systems You own or operate, provided You hold a valid
+      Plus License Key for each such instance.
+
+No other rights are granted unless explicitly stated below.
+
+───────────────────────────────────────────────────────────────────────
+§ 3  RESTRICTIONS
+───────────────────────────────────────────────────────────────────────
+
+3.1  No Redistribution.
+You must not distribute, sublicense, sell, rent, lease, or otherwise
+make the Plus Code (or any derivative thereof) available to any third
+party, in source or binary form, with or without modification.
+
+3.2  No Modification (general rule).
+You must not modify, adapt, translate, reverse-engineer (beyond what
+applicable law permits), or create derivative works of the Plus Code,
+except as explicitly permitted in § 4.
+
+3.3  No Forking / Re-Branding.
+You must not publish a fork or derivative of the Plus Code under the
+same or a confusingly similar name. See TRADEMARK.md for protected
+names and domains.
+
+3.4  Key Requirement.
+You must not activate, enable, or circumvent Plus features without a
+valid Plus License Key issued by the Licensor.
+
+───────────────────────────────────────────────────────────────────────
+§ 4  SECURITY-PATCH AND OWN-USE EXCEPTION (CLA-Assignment Clause)
+───────────────────────────────────────────────────────────────────────
+
+4.1  Permitted modifications.
+Notwithstanding § 3.2, You may modify the Plus Code solely for:
+
+  (a) applying a security patch to address a critical vulnerability
+      in Your own licensed instance; or
+  (b) adapting the Plus Code for the specific operational requirements
+      of Your own licensed instance (e.g. integration with internal
+      infrastructure).
+
+4.2  Mandatory rights assignment.
+Any modification made under § 4.1 is subject to the following
+condition precedent: by making the modification You automatically and
+irrevocably assign to the Licensor, without further consideration, all
+copyright, patent, and other intellectual-property rights in and to
+that modification, worldwide, for the full term of protection.  This
+assignment is effective at the moment the modification is created.
+
+4.3  No redistribution of modifications.
+Even if You qualify for the § 4.1 exception, You must not distribute
+the modified Plus Code to any third party.  The rights assignment in
+§ 4.2 benefits the Licensor, not the general public.
+
+4.4  Notification (encouraged, not mandatory).
+You are encouraged to notify the Licensor of security patches at
+license@p3portal.org so that they may be incorporated into the
+official release for the benefit of all customers.
+
+───────────────────────────────────────────────────────────────────────
+§ 5  LICENCE KEY ACTIVATION
+───────────────────────────────────────────────────────────────────────
+
+Plus features require a valid Plus License Key (`plus.lic`) issued by
+the Licensor.  License keys are individually bound and are not
+transferable between organisations or instances unless the Licensor
+explicitly permits such transfer in writing.
+
+───────────────────────────────────────────────────────────────────────
+§ 6  TRADEMARK RESERVATION
+───────────────────────────────────────────────────────────────────────
+
+This license does not grant permission to use the trade names,
+trademarks, service marks, product names, author pseudonyms, or domain
+names of the Licensor except as required for reasonable and customary
+use in describing the origin of the Software.
+
+The following are NOT licensed under this agreement:
+  - "P3 Portal" (planned word mark; see TRADEMARK.md)
+  - "rootq" (author pseudonym; protected under § 13 UrhG)
+  - "p3portal.org" and "rootq.de" (domains of the Licensor)
+
+See TRADEMARK.md for detailed usage rules.
+
+───────────────────────────────────────────────────────────────────────
+§ 7  LIMITATION OF LIABILITY
+───────────────────────────────────────────────────────────────────────
+
+7.1  The Plus Code is provided "as is", without warranty of any kind,
+express or implied, including but not limited to the warranties of
+merchantability and fitness for a particular purpose.
+
+7.2  The Licensor is liable without limitation for:
+  (a) intent (Vorsatz);
+  (b) gross negligence (grobe Fahrlässigkeit);
+  (c) breach of cardinal obligations (Kardinalpflichten) — but only to
+      the extent of typically foreseeable damage; and
+  (d) death, personal injury, or damage to health.
+
+7.3  For all other claims, the Licensor's total aggregate liability
+shall not exceed the Plus license fees actually paid by You to the
+Licensor in the twelve (12) months immediately preceding the claim.
+
+7.4  For evaluation / trial licenses where no fee has been paid, the
+liability cap under § 7.3 shall be determined by the competent court
+at its equitable discretion.
+
+[TODO: Anwalt-Review vor Verkaufsstart empfohlen – insbesondere § 7.4
+und Mindestkapitalisierung bei UG-Gründung.]
+
+───────────────────────────────────────────────────────────────────────
+§ 8  GOVERNING LAW AND JURISDICTION
+───────────────────────────────────────────────────────────────────────
+
+This license is governed exclusively by the laws of the Federal
+Republic of Germany, excluding its conflict-of-law rules and excluding
+the UN Convention on Contracts for the International Sale of Goods
+(CISG).
+
+Any dispute arising out of or in connection with this license shall be
+subject to the exclusive jurisdiction of the courts at the registered
+or habitual residence of the Licensor.
+
+[Gerichtsstand: noch zu konkretisieren – wird vor erstem Plus-Verkauf
+durch Angabe des konkreten Amts- oder Landgerichts ersetzt, sobald das
+Identitätsmodell (§ 9) feststeht.]
+
+───────────────────────────────────────────────────────────────────────
+§ 9  TERM AND TERMINATION
+───────────────────────────────────────────────────────────────────────
+
+9.1  This license is effective until terminated.
+
+9.2  Your rights under this license terminate automatically and
+immediately, without notice, if You:
+
+  (a) breach § 3 (Restrictions);
+  (b) make modifications outside the scope of § 4;
+  (c) fail to maintain a valid Plus License Key for an active instance;
+      or
+  (d) assign, sublicense, or transfer any rights granted herein without
+      prior written consent of the Licensor.
+
+9.3  Upon termination, You must cease all use of the Plus Code and
+destroy all copies in Your possession or control.
+
+9.4  Sections § 3, § 4.2, § 6, § 7, § 8, and § 9.3 survive
+termination of this license.
+
+───────────────────────────────────────────────────────────────────────
+§ 10  CONTACT AND LICENCE ENQUIRIES
+───────────────────────────────────────────────────────────────────────
+
+For license purchases, trial keys, security-patch notifications, or
+any other enquiry, contact:
+
+  E-mail:  license@p3portal.org
+  Website: https://p3portal.org
+
+───────────────────────────────────────────────────────────────────────
+END OF LICENCE

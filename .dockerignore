@@ -1,0 +1,40 @@
+# p3portal.org
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Volumes (werden beim Start gemountet, gehören nicht ins Image)
+data/
+ssl/
+
+# Entwicklungs-Artefakte
+frontend/node_modules/
+frontend/dist/
+frontend/tests/
+frontend/.eslintrc*
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+**/__pycache__/
+**/test_*.py
+backend/tests/
+
+# Vendor-Tools (sign_license.py + Secrets – nie im Container)
+tools/
+
+# Doku (nicht im Image nötig)
+docs/
+features/
+memory/
+*.md
+!ansible/requirements.yml
+!backend/page_descriptions/*.md
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo

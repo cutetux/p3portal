@@ -1,0 +1,27 @@
+{
+  "name": "Dark",
+  "author": "p3portal.org",
+  "version": "1.0",
+  "variables": {
+    "--sidebar":     "#18181b",
+    "--bg":          "#09090b",
+    "--bg2":         "#27272a",
+    "--bg3":         "#3f3f46",
+    "--border":      "#3f3f46",
+    "--border2":     "#52525b",
+    "--text":        "#d4d4d8",
+    "--text2":       "#a1a1aa",
+    "--text3":       "#71717a",
+    "--white":       "#f4f4f5",
+    "--accent":      "#ea580c",
+    "--green":       "#22c55e",
+    "--orange":      "#f97316",
+    "--blue":        "#3b82f6",
+    "--purple":      "#7c5cbf",
+    "--red":         "#ef4444",
+    "--yellow":      "#eab308",
+    "--font":        "'Inter', sans-serif",
+    "--radius-card": "4px",
+    "--radius-btn":  "3px"
+  }
+}

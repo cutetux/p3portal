@@ -1,0 +1,374 @@
+// p3portal.org
+import { useRef, useEffect, useState, useMemo } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useJobs, useJobLog } from '../../hooks/useJobs'
+import { useAuth } from '../../hooks/useAuth'
+import { useAuditLogs } from '../../hooks/useLogs'
+import { useProxmoxAuditLog } from '../../hooks/useProxmoxAuditLog'
+import { cancelJob } from '../../api/jobs'
+import ProxmoxAuditTab from '../../components/logs/ProxmoxAuditTab'
+import AlertHistoryTab from '../../components/logs/AlertHistoryTab'
+import PinIcon from '../../components/common/PinIcon'
+import { usePinToggle } from '../../features/sidebar_pins/hooks/usePinToggle'
+import HelpButton from '../../features/help/components/HelpButton'
+
+function TabPinButton({ tabId, label }) {
+  const { isPinned, loading, toggle, atLimit } = usePinToggle({
+    route: `/events?tab=${tabId}`,
+    pinKind: 'other',
+    defaultLabel: `Events – ${label}`,
+  })
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); toggle() }}
+      disabled={loading || (atLimit && !isPinned)}
+      className="p-0.5 rounded transition-colors hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+      title={atLimit && !isPinned ? 'Pin-Limit erreicht' : isPinned ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+    >
+      <PinIcon pinned={isPinned} disabled={atLimit && !isPinned} className="w-3.5 h-3.5" />
+    </button>
+  )
+}
+
+const STATUS_COLOR = {
+  pending: 'text-gray-500 dark:text-zinc-400',
+  running: 'text-orange-600 dark:text-orange-400',
+  success: 'text-green-600 dark:text-green-400',
+  failed:  'text-red-600 dark:text-red-400',
+}
+
+function JobRow({ job, active, onClick }) {
+  const date = new Date(job.created_at)
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-zinc-800 transition-colors ${
+        active ? 'bg-orange-50 dark:bg-orange-950/20 border-l-2 border-l-orange-500' : 'hover:bg-gray-50 dark:hover:bg-zinc-800/60'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-gray-900 dark:text-zinc-100 truncate">{job.playbook}</span>
+        <span className={`text-xs font-medium shrink-0 ${STATUS_COLOR[job.status] ?? ''}`}>
+          {job.status}
+        </span>
+      </div>
+      <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+        {date.toLocaleDateString('de-DE')} {date.toLocaleTimeString('de-DE')}
+        {' · '}<span className="font-mono">{job.username}</span>
+      </p>
+    </button>
+  )
+}
+
+function LogPanel({ jobId }) {
+  const { lines, status, connected, job } = useJobLog(jobId)
+  const logRef = useRef(null)
+  const [cancelling, setCancelling] = useState(false)
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+  }, [lines])
+
+  async function handleCancel() {
+    if (!confirm('Job wirklich abbrechen?')) return
+    setCancelling(true)
+    try { await cancelJob(jobId) } catch { /* Status-Update kommt via WebSocket */ } finally { setCancelling(false) }
+  }
+
+  const STATUS_BADGE = {
+    pending: 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400',
+    running: 'bg-orange-50 dark:bg-orange-950/60 text-orange-700 dark:text-orange-400',
+    success: 'bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-400',
+    failed:  'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-400',
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-zinc-700 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={`shrink-0 text-xs font-medium px-2.5 py-1 ${STATUS_BADGE[status] ?? STATUS_BADGE.pending}`}>
+            {status === 'running' && (
+              <svg className="inline animate-spin w-3 h-3 mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            )}
+            {status}
+          </span>
+          {job && (
+            <span className="text-xs text-gray-500 dark:text-zinc-400 truncate">
+              <span className="font-mono text-orange-600 dark:text-orange-400">{job.username}</span>
+              <span className="mx-1">·</span>
+              {job.playbook}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {status === 'running' && (
+            <button onClick={handleCancel} disabled={cancelling}
+              className="text-xs text-red-600 dark:text-red-400 hover:underline disabled:opacity-40 transition">
+              {cancelling ? 'Abbricht…' : 'Abbrechen'}
+            </button>
+          )}
+          <span className={`text-xs ${connected ? 'text-green-500' : 'text-gray-400 dark:text-zinc-500'}`}>
+            {connected ? '● live' : '○ getrennt'}
+          </span>
+        </div>
+      </div>
+      <div ref={logRef} className="flex-1 overflow-y-auto bg-zinc-950 p-4 font-mono text-xs text-zinc-300 leading-relaxed">
+        {lines.length === 0
+          ? <span className="text-zinc-600">Warte auf Ausgabe…</span>
+          : lines.map((line, i) => <div key={i} className="whitespace-pre-wrap break-all">{line}</div>)
+        }
+      </div>
+    </div>
+  )
+}
+
+function AuditLogsTab() {
+  const [filterEvent, setFilterEvent] = useState('')
+  const [filterUser, setFilterUser] = useState('')
+  const [debouncedUser, setDebouncedUser] = useState('')
+  useEffect(() => {
+    const tt = setTimeout(() => setDebouncedUser(filterUser), 300)
+    return () => clearTimeout(tt)
+  }, [filterUser])
+  const { logs, total, loading, error, refresh, offset, setOffset, limit } = useAuditLogs({
+    eventType: filterEvent, username: debouncedUser,
+  })
+  const hasPrev = offset > 0
+  const hasNext = offset + limit < total
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-zinc-700 shrink-0 bg-gray-50 dark:bg-zinc-950">
+        <select value={filterEvent} onChange={e => { setFilterEvent(e.target.value); setOffset(0) }}
+          className="text-xs border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500">
+          <option value="">Alle Ereignisse</option>
+          <option value="login_success">Login erfolgreich</option>
+          <option value="login_failed">Login fehlgeschlagen</option>
+          <option value="logout">Logout</option>
+          <option value="job_started">Job gestartet</option>
+          <option value="job_cancelled">Job abgebrochen</option>
+          <option value="user_created">Nutzer erstellt</option>
+          <option value="user_updated">Nutzer geändert</option>
+          <option value="user_deleted">Nutzer gelöscht</option>
+        </select>
+        <input type="text" value={filterUser} onChange={e => { setFilterUser(e.target.value); setOffset(0) }}
+          placeholder="Nutzername"
+          className="flex-1 text-xs border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 placeholder-gray-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+        <button onClick={refresh} disabled={loading}
+          className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40 transition shrink-0">
+          {loading ? '…' : '↻'}
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto bg-white dark:bg-zinc-900">
+        {error && <div className="m-3 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-700 dark:text-red-400">Fehler beim Laden</div>}
+        {!loading && logs.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <p className="text-sm text-gray-500 dark:text-zinc-400">Keine Einträge gefunden.</p>
+          </div>
+        )}
+        {logs.length > 0 && (
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
+              <tr>
+                <th className="text-left px-4 py-2 font-medium text-gray-500 dark:text-zinc-400 w-40">Zeit</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400">Ereignis</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400">Nutzer</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400 w-32">IP</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map(entry => {
+                const date = new Date(entry.created_at)
+                return (
+                  <tr key={entry.id} className="border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/40">
+                    <td className="px-4 py-2 font-mono text-gray-500 dark:text-zinc-500 whitespace-nowrap">
+                      {date.toLocaleDateString('de-DE')} {date.toLocaleTimeString('de-DE')}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800 dark:text-zinc-200">{entry.event_type}</td>
+                    <td className="px-3 py-2 font-mono text-gray-800 dark:text-zinc-200">{entry.username ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-gray-500 dark:text-zinc-500">{entry.ip_address ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-500 dark:text-zinc-500 truncate max-w-xs">{entry.detail ?? '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {total > limit && (
+        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-950 shrink-0">
+          <span className="text-xs text-gray-500 dark:text-zinc-400">{offset + 1}–{Math.min(offset + limit, total)} von {total}</span>
+          <div className="flex gap-2">
+            <button onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={!hasPrev}
+              className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40">← Zurück</button>
+            <button onClick={() => setOffset(o => o + limit)} disabled={!hasNext}
+              className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40">Weiter →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const TABS = [
+  { id: 'jobs', label: 'Jobs' },
+  { id: 'alerts', label: 'Alert-Historie' },
+  { id: 'audit', label: 'Audit Log' },
+  { id: 'proxmox-audit', label: 'Proxmox Audit' },
+]
+
+export default function EventsPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const { jobs, loading, error, refresh } = useJobs()
+  const { role, portalPermissions } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'jobs'
+  const isAdmin = role === 'admin'
+  const canViewLogs = isAdmin || (portalPermissions ?? []).includes('view_logs')
+  const proxmoxAudit = useProxmoxAuditLog()
+  const showProxmoxAudit = isAdmin && proxmoxAudit.tabVisible
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterName, setFilterName] = useState('')
+  const [sortDesc, setSortDesc] = useState(true)
+
+  const visibleJobs = useMemo(() => {
+    let list = [...jobs]
+    if (filterStatus) list = list.filter(j => j.status === filterStatus)
+    if (filterName.trim()) {
+      const q = filterName.trim().toLowerCase()
+      list = list.filter(j => j.username?.toLowerCase().includes(q))
+    }
+    list.sort((a, b) => {
+      const ta = new Date(a.created_at).getTime()
+      const tb = new Date(b.created_at).getTime()
+      return sortDesc ? tb - ta : ta - tb
+    })
+    return list
+  }, [jobs, filterStatus, filterName, sortDesc])
+
+  const visibleTabs = TABS.filter(t => {
+    if (t.id === 'audit') return canViewLogs
+    if (t.id === 'proxmox-audit') return showProxmoxAudit
+    return true
+  })
+
+  const tabCls = (id) =>
+    `px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+      activeTab === id
+        ? 'border-orange-500 text-gray-900 dark:text-zinc-100'
+        : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
+    }`
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <header className="h-12 flex items-center justify-between px-6 border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shrink-0">
+        <div className="flex items-center gap-2">
+          <h1 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">Events</h1>
+          <HelpButton helpKey="logs" />
+        </div>
+        {activeTab === 'jobs' && (
+          <button onClick={refresh} disabled={loading}
+            className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40 transition">
+            {loading ? 'Lädt…' : '↻ Aktualisieren'}
+          </button>
+        )}
+      </header>
+
+      <div className="flex border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-6 shrink-0">
+        {visibleTabs.map(tab => (
+          <button key={tab.id} onClick={() => setSearchParams({ tab: tab.id })} className={tabCls(tab.id)}>
+            {tab.label}
+          </button>
+        ))}
+        <div className="ml-auto self-center pr-1">
+          <TabPinButton tabId={activeTab} label={visibleTabs.find(t => t.id === activeTab)?.label ?? activeTab} />
+        </div>
+      </div>
+
+      {activeTab === 'jobs' && (
+        <div className="flex flex-1 min-h-0 m-4 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700">
+          <div className="w-80 shrink-0 border-r border-gray-200 dark:border-zinc-700 flex flex-col bg-gray-50 dark:bg-zinc-950">
+            <div className="flex flex-col border-b border-gray-200 dark:border-zinc-700 shrink-0">
+              <div className="flex items-center gap-2 px-3 py-2">
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                  className="flex-1 text-xs border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500">
+                  <option value="">Alle Status</option>
+                  <option value="running">Läuft</option>
+                  <option value="pending">Ausstehend</option>
+                  <option value="success">Erfolgreich</option>
+                  <option value="failed">Fehlgeschlagen</option>
+                </select>
+                <button onClick={() => setSortDesc(d => !d)}
+                  className="shrink-0 flex items-center gap-1 text-xs text-gray-500 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 px-2 py-1.5 bg-white dark:bg-zinc-800 transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`w-3.5 h-3.5 transition-transform ${sortDesc ? '' : 'rotate-180'}`}>
+                    <path d="M12 5v14M5 12l7 7 7-7" />
+                  </svg>
+                  {sortDesc ? 'Neu' : 'Alt'}
+                </button>
+              </div>
+              {isAdmin && (
+                <div className="px-3 pb-2">
+                  <input type="text" value={filterName} onChange={e => setFilterName(e.target.value)}
+                    placeholder="Nutzer filtern"
+                    className="w-full text-xs border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 placeholder-gray-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {error && <div className="m-3 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-700 dark:text-red-400">Fehler beim Laden</div>}
+              {!loading && visibleJobs.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                  <p className="text-sm text-gray-500 dark:text-zinc-400">Keine Jobs gefunden.</p>
+                </div>
+              )}
+              {visibleJobs.map(job => (
+                <JobRow
+                  key={job.id}
+                  job={job}
+                  active={String(job.id) === String(id)}
+                  onClick={() => navigate(`/events/${job.id}`)}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {id ? (
+              <LogPanel jobId={id} />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center bg-gray-50 dark:bg-zinc-950">
+                <p className="text-sm text-gray-500 dark:text-zinc-400">Job auswählen</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'alerts' && (
+        <div className="flex flex-1 min-h-0 m-4 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700">
+          <AlertHistoryTab />
+        </div>
+      )}
+
+      {activeTab === 'audit' && (
+        <div className="flex flex-1 min-h-0 m-4 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700">
+          <AuditLogsTab />
+        </div>
+      )}
+
+      {activeTab === 'proxmox-audit' && (
+        <div className="flex flex-1 min-h-0 m-4 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700">
+          <ProxmoxAuditTab
+            entries={proxmoxAudit.entries}
+            loading={proxmoxAudit.loading}
+            error={proxmoxAudit.error}
+            refresh={proxmoxAudit.refresh}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
