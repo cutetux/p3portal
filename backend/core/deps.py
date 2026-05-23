@@ -171,8 +171,6 @@ async def require_admin(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Dependency: requires role == admin."""
-    if current_user.auth_type == "proxmox":
-        return current_user  # Proxmox enforces its own permissions
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -185,8 +183,6 @@ async def require_operator(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Dependency: requires role admin or operator (not viewer)."""
-    if current_user.auth_type == "proxmox":
-        return current_user  # Proxmox enforces its own permissions
     if current_user.role not in ("admin", "operator"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

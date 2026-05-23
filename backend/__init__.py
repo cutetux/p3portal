@@ -1,3 +1,3 @@
 # p3portal.org
 __author__ = "p3portal.org"
-__version__ = "v1.74.5-beta"
+__version__ = "v1.74.6-beta"

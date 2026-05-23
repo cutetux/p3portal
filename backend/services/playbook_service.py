@@ -196,13 +196,20 @@ def save_playbook_zip(zip_content: bytes) -> str:
         raise FileExistsError(f"Verzeichnis '{playbook_id}' existiert bereits")
 
     dest_dir.mkdir(parents=True, exist_ok=False)
+    dest_dir_resolved = dest_dir.resolve()
     for name in names:
         if not name.startswith(prefix):
             continue
         relative = name[len(prefix):]
         if not relative:
             continue
+        # Reject absolute paths – pathlib silently discards dest_dir when RHS is absolute
+        if relative.startswith("/") or relative.startswith("\\"):
+            raise ValueError(f"Absolute path in ZIP not allowed: {name}")
         dest = dest_dir / relative
+        # Defense-in-depth: ensure resolved path is still inside dest_dir
+        if not dest.resolve().is_relative_to(dest_dir_resolved):
+            raise ValueError(f"Path traversal detected: {name}")
         if name.endswith("/"):
             dest.mkdir(parents=True, exist_ok=True)
         else:
