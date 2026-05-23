@@ -207,13 +207,20 @@ def save_template_zip(zip_content: bytes) -> str:
 
     # Extract all files under prefix into template_dir
     template_dir.mkdir(parents=True, exist_ok=False)
+    template_dir_resolved = template_dir.resolve()
     for name in names:
         if not name.startswith(prefix):
             continue
         relative = name[len(prefix):]
         if not relative:
             continue
+        # Reject absolute paths – pathlib silently discards template_dir when RHS is absolute
+        if relative.startswith("/") or relative.startswith("\\"):
+            raise ValueError(f"Absolute path in ZIP not allowed: {name}")
         dest = template_dir / relative
+        # Defense-in-depth: ensure resolved path is still inside template_dir
+        if not dest.resolve().is_relative_to(template_dir_resolved):
+            raise ValueError(f"Path traversal detected: {name}")
         if name.endswith("/"):
             dest.mkdir(parents=True, exist_ok=True)
         else:

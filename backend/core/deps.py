@@ -221,13 +221,8 @@ async def require_not_restricted(
 
 
 def require_admin_or(permission: str):
-    """Factory: returns a dependency that allows admin role OR the given portal permission.
-
-    Proxmox-auth users bypass the check (Proxmox enforces its own permissions).
-    """
+    """Factory: returns a dependency that allows admin role OR the given portal permission."""
     async def _check(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-        if current_user.auth_type == "proxmox":
-            return current_user
         if current_user.role == "admin":
             return current_user
         if permission in current_user.portal_permissions:
