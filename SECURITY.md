@@ -87,8 +87,9 @@ be named there.
 Researchers who have helped harden P3 Portal:
 
 - [@cutetux](https://github.com/cutetux) – Zip-Slip in playbook upload +
-  `require_admin` bypass (GitHub #4, fixed in
-  [`e59996b`](https://github.com/P3Portal-org/p3portal/commit/e59996b))
+  `require_admin` bypass (GitHub
+  [#4](https://github.com/P3Portal-org/p3portal/issues/4), fixed in
+  [`v1.74.6-beta`](https://github.com/P3Portal-org/p3portal/releases/tag/v1.74.6-beta))
 
 Thank you. Open source is only as safe as the people who take the time to
 look at the code.
