@@ -153,6 +153,28 @@ for details.
 The `:latest`, `:core`, and `:plus` image tags on
 `ghcr.io/p3portal-org` follow the supported version automatically.
 
+### Removed Plus-edition images (v1.74.5-beta..v1.74.7-beta)
+
+To stop continued proprietary distribution of source code with
+unresolved contribution licensing, the **Plus-edition** container
+images for the superseded versions have been removed from
+`ghcr.io/p3portal-org/p3portal`:
+
+- `ghcr.io/p3portal-org/p3portal:1.74.5-beta-plus` — removed
+- `ghcr.io/p3portal-org/p3portal:1.74.6-beta-plus` — removed
+- `ghcr.io/p3portal-org/p3portal:1.74.7-beta-plus` — removed
+
+The **Core-edition** images for the same versions
+(`:1.74.5-beta`, `:1.74.6-beta`, `:1.74.7-beta`) **remain
+available** for reproducibility. The Core edition is distributed
+under the AGPLv3, under which the contribution-licensing question
+is materially weaker than for the proprietary Plus bundle.
+
+This removal is a proactive risk-mitigation step taken when the
+contribution-licensing issue was identified, not an attempt to
+remove historical evidence. The git tags, commit history, GitHub
+release pages, and Core-edition images are all retained.
+
 ## Hall of thanks
 
 Researchers who have reported security issues in P3 Portal.
