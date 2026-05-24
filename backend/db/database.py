@@ -38,12 +38,24 @@ def _db_url() -> str:
     return f"sqlite+aiosqlite:///{db_path}"
 
 
+# Per-connection SQLite settings applied via the SQLAlchemy connect listener.
+# Both the FastAPI app and the Celery worker (--beat) write to data/portal.db
+# concurrently; WAL plus a non-zero busy_timeout are required so a writer
+# collision retries instead of failing immediately with "database is locked".
+_SQLITE_CONNECTION_PRAGMAS: tuple[tuple[str, str], ...] = (
+    ("foreign_keys", "ON"),
+    ("journal_mode", "WAL"),
+    ("busy_timeout", "5000"),
+)
+
+
 def _set_sqlite_pragma(dbapi_conn, _connection_record):
     cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.close()
+    try:
+        for pragma_name, pragma_value in _SQLITE_CONNECTION_PRAGMAS:
+            cursor.execute(f"PRAGMA {pragma_name}={pragma_value}")
+    finally:
+        cursor.close()
 
 
 @asynccontextmanager

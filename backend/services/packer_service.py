@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from backend.core.config import settings
 from backend.models.packer import PackerDetail, PackerMeta, PackerParameter, PackerSummary
+from backend.services._zip_safety import UnsafeZipMember, extract_zip_safely
 
 _CREDENTIAL_IDS = {"proxmox_api_url", "proxmox_api_token_id", "proxmox_api_token_secret"}
 _TEMPLATE_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
@@ -207,25 +208,19 @@ def save_template_zip(zip_content: bytes) -> str:
 
     # Extract all files under prefix into template_dir
     template_dir.mkdir(parents=True, exist_ok=False)
-    template_dir_resolved = template_dir.resolve()
-    for name in names:
-        if not name.startswith(prefix):
-            continue
-        relative = name[len(prefix):]
-        if not relative:
-            continue
-        # Reject absolute paths – pathlib silently discards template_dir when RHS is absolute
-        if relative.startswith("/") or relative.startswith("\\"):
-            raise ValueError(f"Absolute path in ZIP not allowed: {name}")
-        dest = template_dir / relative
-        # Defense-in-depth: ensure resolved path is still inside template_dir
-        if not dest.resolve().is_relative_to(template_dir_resolved):
-            raise ValueError(f"Path traversal detected: {name}")
-        if name.endswith("/"):
-            dest.mkdir(parents=True, exist_ok=True)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(zf.read(name))
+    try:
+        extract_zip_safely(
+            zf,
+            template_dir,
+            name_filter=names,
+            name_strip_prefix=prefix,
+        )
+    except UnsafeZipMember as exc:
+        shutil.rmtree(template_dir, ignore_errors=True)
+        raise ValueError(f"Ungültiger Pfad in ZIP: {exc}") from exc
+    except Exception:
+        shutil.rmtree(template_dir, ignore_errors=True)
+        raise
 
     return stem
 

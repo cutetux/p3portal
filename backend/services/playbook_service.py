@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from backend.core.config import settings
 from backend.models.playbooks import PlaybookDetail, PlaybookMeta, PlaybookSummary
+from backend.services._zip_safety import UnsafeZipMember, extract_zip_safely
 
 _PLAYBOOK_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
 
@@ -196,25 +197,21 @@ def save_playbook_zip(zip_content: bytes) -> str:
         raise FileExistsError(f"Verzeichnis '{playbook_id}' existiert bereits")
 
     dest_dir.mkdir(parents=True, exist_ok=False)
-    dest_dir_resolved = dest_dir.resolve()
-    for name in names:
-        if not name.startswith(prefix):
-            continue
-        relative = name[len(prefix):]
-        if not relative:
-            continue
-        # Reject absolute paths – pathlib silently discards dest_dir when RHS is absolute
-        if relative.startswith("/") or relative.startswith("\\"):
-            raise ValueError(f"Absolute path in ZIP not allowed: {name}")
-        dest = dest_dir / relative
-        # Defense-in-depth: ensure resolved path is still inside dest_dir
-        if not dest.resolve().is_relative_to(dest_dir_resolved):
-            raise ValueError(f"Path traversal detected: {name}")
-        if name.endswith("/"):
-            dest.mkdir(parents=True, exist_ok=True)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(zf.read(name))
+    try:
+        extract_zip_safely(
+            zf,
+            dest_dir,
+            name_filter=names,
+            name_strip_prefix=prefix,
+        )
+    except UnsafeZipMember as exc:
+        # Roll back the directory we just created so a rejected upload
+        # leaves no half-written state behind.
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise ValueError(f"Ungültiger Pfad in ZIP: {exc}") from exc
+    except Exception:
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise
 
     return playbook_id
 
