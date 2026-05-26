@@ -3,31 +3,7 @@
 [![Core: AGPLv3](https://img.shields.io/badge/Core-AGPLv3-blue.svg)](LICENSE)
 [![Plus: Source-Available](https://img.shields.io/badge/Plus-Source--Available%20%2B%20Key-orange.svg)](LICENSE-PLUS)
 
-> **This repository is the Core Edition (100 % AGPLv3).**
->
-> Plus Edition source was part of this repository **up to and including release `v1.74.9-beta`** (in `backend/plus/` and `frontend/src/plus/`). With release `v1.75.0-beta` it has been moved to a separate **Source-Available** repository at https://github.com/P3Portal-org/p3portal-plus under [`LICENSE-PLUS`](LICENSE-PLUS) (proprietary, license-key gated; the source can be read for review and audit, but modification and redistribution are prohibited). Plus-related historical commits remain reachable in this repo's git history (each historical Plus source file carries its own `SPDX-License-Identifier: LicenseRef-LICENSE-PLUS` header — `LICENSE-PLUS` text stays at the repo root for transparent resolution).
->
-> The Plus image is published independently at `ghcr.io/p3portal-org/p3portal-plus` and is **not** built from this repository. See [docs/repo-split-migration.md](docs/repo-split-migration.md) for the image-tag migration if you used the previous combined image.
-
-### P3 Portal Plus Edition (briefly)
-
-Plus is the commercial superset of Core. It adds (non-exhaustive list):
-
-- **Pools with resource quotas** — own portal pools with CPU/RAM/disk limits
-- **Approval workflow** — four-eyes principle for playbook runs, packer builds, template deletions, owner-change requests
-- **Git-Sync** — auto-sync of playbooks and packer templates from external Git repos (HTTPS+PAT or SSH key)
-- **Scheduled Jobs** — cron-based Ansible / SSH / VM-power-action automation
-- **Theme Editor** — visual theme customisation (Plus-only)
-- **Extended User-API-Keys** — Plus-only scopes
-- **Owner auto-assignment on deploy** — deployer becomes VM owner via resolver pipeline, with co-ownership and external-VM adoption
-- **Node-scope permissions** — preset rules for all VMs/LXCs on a chosen node
-- **Functional permissions** — playbook whitelist per user/group, ISO-upload gate
-- **Multi-node dashboard** — independent Proxmox installations side by side
-- **VM/LXC monitoring & alerting** — threshold alerts (webhook / e-mail / banner), preset rules
-
-Plus image: `ghcr.io/p3portal-org/p3portal-plus:latest`
-Plus source: https://github.com/P3Portal-org/p3portal-plus
-License: requires a valid `plus.lic` key to activate Plus features at runtime. See `LICENSE-PLUS` and `COMMERCIAL.md` for terms. Plus-Verkauf is currently inactive (`LEGAL_ENTITY = None`); no new commercial licenses are being issued at this time.
+> This is the **Core repository** (100 % AGPLv3). The Plus Edition source moved out of this repository with `v1.75.0-beta` and lives at https://github.com/P3Portal-org/p3portal-plus. See [Core vs. Plus](#core-vs-plus) below.
 
 **P3 Portal** is a self-contained Docker/Podman container that provides a web GUI for managing Proxmox clusters. Users are managed locally in the portal; Proxmox API tokens are used by the backend to execute operations on the cluster.
 
@@ -103,48 +79,28 @@ docker pull ghcr.io/p3portal-org/p3portal:latest
 podman pull ghcr.io/p3portal-org/p3portal:latest
 ```
 
-Available tags:
+Available Core tags:
 
-| Tag | Plus code | Licence |
-|---|---|---|
-| `ghcr.io/p3portal-org/p3portal:latest` / `:core` | — excluded | 100 % AGPLv3 |
-| `ghcr.io/p3portal-org/p3portal:plus` | ✓ included | AGPLv3 (Core) + LICENSE-PLUS (Plus) |
+| Tag | Licence |
+|---|---|
+| `ghcr.io/p3portal-org/p3portal:latest` / `:core` | 100 % AGPLv3 |
 
-Versioned tags like `:1.74.0-beta` and `:1.74.0-beta-plus` are also published — use them to pin a specific release.
+Versioned tags like `:1.75.0-beta` are also published — use them to pin a specific release.
 
-### 3a — Use the Plus image
+For the Plus Edition image see the [Core vs. Plus](#core-vs-plus) section below.
 
-If you want the Plus image (extra features that require a `plus.lic` key at runtime), point the compose files at the `:plus` tag instead — easiest via an override:
+### 3a — Build locally (optional)
+
+If you want to build the Core image yourself (e.g. for development or behind an air-gapped network):
 
 ```bash
-# docker-compose.override.yml
-services:
-  portal:
-    image: ghcr.io/p3portal-org/p3portal:plus
-  celery-worker:
-    image: ghcr.io/p3portal-org/p3portal:plus
+docker build -t p3portal:local .
 ```
 
-Without a `plus.lic` key the Plus image behaves identically to Core; the Plus features only unlock once a valid key is uploaded in **System Settings → License**.
-
-### 3b — Build locally (optional)
-
-If you want to build the image yourself (e.g. for development or behind an air-gapped network):
+To verify that the build contains no Plus artifacts:
 
 ```bash
-# Core (default, AGPLv3 only)
-docker build --build-arg EDITION=core -t ghcr.io/p3portal-org/p3portal:latest .
-
-# Plus
-docker build --build-arg EDITION=plus -t ghcr.io/p3portal-org/p3portal:plus .
-```
-
-Celery, Valkey, and Scheduled Jobs are present in **both** image variants. Core-edition limits apply automatically when no Plus licence key is loaded.
-
-To verify that a Core build contains no Plus artifacts:
-
-```bash
-./tools/verify-core-build.sh ghcr.io/p3portal-org/p3portal:latest
+./tools/verify-core-build.sh p3portal:local
 ```
 
 ### 4 — Start
@@ -268,8 +224,8 @@ If you build locally instead:
 
 ```bash
 git pull
-docker build --build-arg EDITION=core -t ghcr.io/p3portal-org/p3portal:latest .
-docker compose up -d
+docker build -t p3portal:local .
+docker compose up -d   # adjust image: in docker-compose.yml to p3portal:local
 ```
 
 Database schema migrations run automatically on startup.
@@ -295,18 +251,22 @@ Step-by-step `pveum` instructions are in [`docs/proxmox-setup.md`](docs/proxmox-
 
 ## Core vs. Plus
 
-P3 Portal ships as **two separate images** — choose at build/pull time:
+Two independent image streams. Choose at pull time.
 
-- **Core image** (`p3portal:latest`, `p3portal:core`) — 100 % AGPLv3. `backend/plus/` and `frontend/src/plus/` are physically removed during build (see `EDITION=core` in [Dockerfile](Dockerfile)). Plus features are **not present in this image** — no licence key can activate them; they simply do not exist in the binary. To use Plus features you must pull or build the Plus image.
-- **Plus image** (`p3portal:plus`) — same Core code plus the proprietary `backend/plus/` / `frontend/src/plus/` modules. Without a `plus.lic` key the Plus features stay locked and the runtime behaves like Core. With a valid key the features below unlock.
+| Image | Built from | Licence |
+|---|---|---|
+| `ghcr.io/p3portal-org/p3portal:latest` (= `:core`) | this repository (AGPLv3) | 100 % AGPLv3 |
+| `ghcr.io/p3portal-org/p3portal-plus:latest` | https://github.com/P3Portal-org/p3portal-plus (Source-Available) | AGPLv3 (Core) + [LICENSE-PLUS](LICENSE-PLUS) (Plus modules) |
 
-| Feature | Core image | Plus image (no key) | Plus image (licence key) |
+The Plus image embeds the same Core code plus the proprietary `backend/plus/` / `frontend/src/plus/` modules. Without a `plus.lic` runtime key the Plus features stay locked and the image behaves like Core. With a valid key the features below unlock.
+
+| Feature | Core image | Plus image (no key) | Plus image (key) |
 |---|---|---|---|
 | Proxmox cluster dashboard | ✓ | ✓ | ✓ |
 | Ansible playbook runner | ✓ | ✓ | ✓ |
 | Packer template builder | ✓ | ✓ | ✓ |
 | Job history & live logs | ✓ | ✓ | ✓ |
-| Scheduled jobs | — | ✓  up to 3 | ✓ |
+| Scheduled jobs | — | ✓ up to 3 | ✓ |
 | User accounts | ✓ up to 6 | ✓ up to 6 | ✓ |
 | User groups & teams | ✓ up to 3 | ✓ up to 3 | ✓ |
 | Role presets | ✓ up to 5 | ✓ up to 5 | ✓ |
@@ -319,7 +279,7 @@ P3 Portal ships as **two separate images** — choose at build/pull time:
 | Theme editor (colour picker) | — | — | ✓ |
 | Git sync for playbooks & Packer | — | — | ✓ |
 
-Upload your licence key in **System Settings → Licence** or through the Setup Wizard. See [COMMERCIAL.md](COMMERCIAL.md) for details on obtaining a key.
+Upload your licence key in **System Settings → Licence** or through the Setup Wizard. Plus-Verkauf is currently inactive — see [COMMERCIAL.md](COMMERCIAL.md).
 
 ---
 
@@ -342,9 +302,7 @@ cd frontend && npm run lint && npm run build
 
 ## Contributing & Bug Reports
 
-P3 Portal is **dual-licensed**: the Core codebase is open source under AGPLv3, the Plus modules are source-available under a separate licence (see [Licensing](#licensing)).
-
-This is an **early beta**. External pull requests are **not accepted at this time** — incoming PRs will be closed automatically by a workflow. Please use **GitHub Issues** for bug reports, feature ideas and questions.
+P3 Portal is an **early beta**. External pull requests are **not accepted at this time** — incoming PRs will be closed automatically by a workflow. Please use **GitHub Issues** for bug reports, feature ideas and questions.
 
 Contribution policy may change after beta. Until then: code changes come from the maintainer.
 
@@ -354,7 +312,7 @@ Contribution policy may change after beta. Until then: code changes come from th
 
 Significant portions of this codebase were written with the help of AI coding assistants (primarily Anthropic Claude). The maintainer designs the architecture, drives every feature, reviews each change and is responsible for the resulting code and its licensing.
 
-This disclosure is made in the interest of transparency. It does not affect the licence terms: the codebase is covered by [LICENSE](LICENSE) (AGPLv3) and [LICENSE-PLUS](LICENSE-PLUS) as specified below.
+This disclosure is made in the interest of transparency. It does not affect the licence terms: this repository's source is covered by [LICENSE](LICENSE) (AGPLv3) as specified below.
 
 ---
 
@@ -362,13 +320,12 @@ This disclosure is made in the interest of transparency. It does not affect the 
 
 | Path | Licence |
 |---|---|
-| `backend/` (excl. `backend/plus/`) | [AGPLv3](LICENSE) |
-| `frontend/src/` (excl. `frontend/src/plus/`) | [AGPLv3](LICENSE) |
-| `backend/plus/` | [LICENSE-PLUS](LICENSE-PLUS) |
-| `frontend/src/plus/` | [LICENSE-PLUS](LICENSE-PLUS) |
+| `backend/` (everything in this repo) | [AGPLv3](LICENSE) |
+| `frontend/src/` (everything in this repo) | [AGPLv3](LICENSE) |
+| `backend/plus/` / `frontend/src/plus/` | Stubs only in this repo. Full source lives in [p3portal-plus](https://github.com/P3Portal-org/p3portal-plus) under [LICENSE-PLUS](LICENSE-PLUS). |
 
-- [LICENSE](LICENSE) — AGPLv3 + §7(b) Author Attribution
-- [LICENSE-PLUS](LICENSE-PLUS) — Source-Available, key-required, no redistribution
+- [LICENSE](LICENSE) — AGPLv3 + §7(b) Author Attribution (governs all source files in this repository)
+- [LICENSE-PLUS](LICENSE-PLUS) — Source-Available, key-required, no redistribution (governs source files in the separate p3portal-plus repository, and historical Plus commits in this repository's git history)
 - [COMMERCIAL.md](COMMERCIAL.md) — Plus licence details and feature comparison
 - [TRADEMARK.md](TRADEMARK.md) — Trade names, author pseudonym, domain notice
 
