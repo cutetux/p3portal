@@ -88,6 +88,13 @@ RUN if [ "$EDITION" = "core" ]; then \
         echo "PROJ-69: backend/plus/ removed (EDITION=core)"; \
     fi
 
+# PROJ-72: Lizenz-Dateien ins Image kopieren.
+# LICENSE ist immer im Build-Context (AGPLv3 Core-Lizenz).
+# LICENSE-PLUS nur im Plus-Build-Context (durch Plus-CI-Overlay platziert)
+# bzw. heute auch noch in github/ als Phase-A-Übergangszustand.
+# Das Glob `LICENSE*` löst sich immer auf, weil LICENSE garantiert vorhanden ist.
+COPY LICENSE* /app/
+
 # PROJ-17: Plus-Lizenz-Token (verschlüsselt, gleich für alle Kunden)
 COPY plus.enc /app/plus.enc
 

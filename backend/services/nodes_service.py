@@ -331,19 +331,61 @@ async def set_default_node(node_id: int) -> bool:
 async def test_connection(
     url: str, token_id: str, token_secret: str, verify_ssl: bool
 ) -> dict:
-    """Probe /api2/json/version. Returns {ok, version, error}."""
+    """Probe /api2/json/version. Returns {ok, version, error}.
+
+    SSRF-hardening: this endpoint forwards a Proxmox API token to the
+    caller-supplied URL. The target is resolved, blocked address ranges
+    are rejected, and the connection is pinned to the validated IP via
+    Host-header rewrite to prevent DNS-rebinding token exfiltration.
+    Errors are returned in a generic form to avoid information leakage.
+    """
+    import logging
+    from urllib.parse import urlparse
+
+    from backend.core.http_client import (
+        pin_url_to_ip,
+        secure_outbound_client,
+        validate_setup_target_url,
+    )
+    from backend.services.audit_service import write_audit_log
+
+    log = logging.getLogger(__name__)
+    url_clean = url.rstrip("/")
+
     try:
-        async with httpx.AsyncClient(verify=verify_ssl, timeout=5.0) as client:
-            resp = await client.get(
-                f"{url.rstrip('/')}/api2/json/version",
-                headers={"Authorization": f"PVEAPIToken={token_id}={token_secret}"},
+        resolved_ip = validate_setup_target_url(url_clean)
+    except ValueError as exc:
+        try:
+            await write_audit_log(
+                event_type="setup_target_blocked",
+                username=None,
+                auth_type=None,
+                detail=f"test-connection rejected: {exc}",
             )
+        except Exception:
+            pass
+        return {"ok": False, "version": None, "error": "target_address_blocked"}
+
+    pinned_url, extra_headers = pin_url_to_ip(
+        f"{url_clean}/api2/json/version", resolved_ip
+    )
+    extra_headers["Authorization"] = f"PVEAPIToken={token_id}={token_secret}"
+    hostname = urlparse(url_clean).hostname or ""
+
+    try:
+        async with secure_outbound_client(verify=verify_ssl, timeout=5.0) as client:
+            resp = await client.get(pinned_url, headers=extra_headers)
             resp.raise_for_status()
             version = resp.json().get("data", {}).get("version", "unknown")
             return {"ok": True, "version": version, "error": None}
     except httpx.HTTPStatusError as e:
-        return {"ok": False, "version": None, "error": f"HTTP {e.response.status_code}"}
+        return {
+            "ok": False,
+            "version": None,
+            "error": f"HTTP {e.response.status_code}",
+        }
     except httpx.ConnectError:
-        return {"ok": False, "version": None, "error": "Connection refused"}
+        return {"ok": False, "version": None, "error": "connection_failed"}
     except Exception as e:
-        return {"ok": False, "version": None, "error": str(e)}
+        log.warning("test_connection probe failed for host=%s: %s", hostname, e)
+        return {"ok": False, "version": None, "error": "connection_failed"}

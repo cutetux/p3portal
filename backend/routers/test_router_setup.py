@@ -30,6 +30,18 @@ def patch_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "proxmox_node", "")  # fresh install – no env node
 
 
+@pytest.fixture(autouse=True)
+def patch_dns_resolution(monkeypatch):
+    """Default DNS resolution to a public IP for SSRF-guard happy path.
+
+    Individual tests that exercise the block-list (IMDS, loopback, …)
+    override this fixture by re-patching `_resolve_host` to the target IP.
+    """
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "203.0.113.10"
+    )
+
+
 @pytest_asyncio.fixture
 async def client(tmp_path):
     await init_db()
@@ -156,6 +168,132 @@ async def test_test_connection_called(client: AsyncClient):
     assert resp.status_code == 200
     data = resp.json()
     assert data["ok"] is False
+
+
+# ── SSRF hardening: setup-time probes ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_test_node_blocks_imds(client: AsyncClient, monkeypatch):
+    """The disclosure-reported IMDS attack must be rejected."""
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "169.254.169.254"
+    )
+    resp = await client.post(
+        "/api/setup/test-node",
+        json={"url": "http://169.254.169.254", "verify_ssl": False},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["error"] == "target_address_blocked"
+
+
+@pytest.mark.asyncio
+async def test_test_node_blocks_loopback(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "127.0.0.1"
+    )
+    resp = await client.post(
+        "/api/setup/test-node",
+        json={"url": "http://localhost", "verify_ssl": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["error"] == "target_address_blocked"
+
+
+@pytest.mark.asyncio
+async def test_test_node_blocks_dns_rebinding_to_imds(
+    client: AsyncClient, monkeypatch
+):
+    """Public-looking hostname that resolves to IMDS must be rejected."""
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "169.254.169.254"
+    )
+    resp = await client.post(
+        "/api/setup/test-node",
+        json={"url": "https://innocuous.example.com", "verify_ssl": False},
+    )
+    assert resp.json()["error"] == "target_address_blocked"
+
+
+@pytest.mark.asyncio
+async def test_test_connection_blocks_imds(client: AsyncClient, monkeypatch):
+    """Token forwarding to IMDS must be rejected."""
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "169.254.169.254"
+    )
+    resp = await client.post("/api/setup/test-connection", json={
+        "url": "http://169.254.169.254",
+        "token_id": "user@pam!stolen",
+        "token_secret": "should-never-leave",
+        "verify_ssl": False,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["error"] == "target_address_blocked"
+
+
+@pytest.mark.asyncio
+async def test_setup_node_blocks_imds_persistence(
+    client: AsyncClient, monkeypatch
+):
+    """Persisting a malicious URL during setup must be rejected (defense-in-depth)."""
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "169.254.169.254"
+    )
+    resp = await client.post("/api/setup/node", json={
+        "name": "evil",
+        "url": "http://169.254.169.254",
+        "proxmox_node": "pve",
+        "verify_ssl": False,
+        "token_id": "t",
+        "token_secret": "s",
+    })
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_test_node_rfc1918_passes_validation(
+    client: AsyncClient, monkeypatch
+):
+    """RFC1918 (LAN) must NOT be blocked – Proxmox lives on private nets."""
+    monkeypatch.setattr(
+        "backend.core.http_client._resolve_host", lambda h: "192.168.1.50"
+    )
+
+    # Don't actually connect – patch httpx via secure_outbound_client
+    from contextlib import asynccontextmanager
+
+    class _FakeResp:
+        status_code = 200
+        def json(self):
+            return {"data": {"version": "8.1.4"}}
+
+    class _FakeClient:
+        async def get(self, *a, **kw):
+            return _FakeResp()
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            return None
+
+    @asynccontextmanager
+    async def _fake_secure_client(verify=True, timeout=10.0):
+        yield _FakeClient()
+
+    monkeypatch.setattr(
+        "backend.core.http_client.secure_outbound_client", _fake_secure_client
+    )
+
+    resp = await client.post(
+        "/api/setup/test-node",
+        json={"url": "https://pve.lan:8006", "verify_ssl": False},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["version"] == "8.1.4"
 
 
 # ── POST /api/setup/tokens ────────────────────────────────────────────────────

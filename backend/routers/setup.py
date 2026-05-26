@@ -244,13 +244,47 @@ async def test_node_reachability(
     body: TestNodeRequest,
     _: str | None = Depends(_require_setup_access),
 ) -> dict:
-    """Check if a Proxmox URL is reachable via its public version endpoint."""
-    import httpx
+    """Check if a Proxmox URL is reachable via its public version endpoint.
 
+    SSRF-hardening: the caller-supplied URL is resolved before the request,
+    blocked address ranges (loopback, link-local incl. 169.254.169.254,
+    multicast) are rejected, and the outgoing connection is pinned to the
+    validated IP via Host-header rewrite to mitigate DNS-rebinding.
+    Errors are returned in a generic form to avoid information leakage.
+    """
+    import logging
+    from urllib.parse import urlparse
+
+    from backend.core.http_client import (
+        pin_url_to_ip,
+        secure_outbound_client,
+        validate_setup_target_url,
+    )
+    from backend.services.audit_service import write_audit_log
+
+    log = logging.getLogger(__name__)
     url = body.url.rstrip("/")
+
     try:
-        async with httpx.AsyncClient(verify=body.verify_ssl, timeout=10) as client:
-            r = await client.get(f"{url}/api2/json/version")
+        resolved_ip = validate_setup_target_url(url)
+    except ValueError as exc:
+        try:
+            await write_audit_log(
+                event_type="setup_target_blocked",
+                username=None,
+                auth_type=None,
+                detail=f"test-node rejected: {exc}",
+            )
+        except Exception:
+            pass
+        return {"ok": False, "error": "target_address_blocked"}
+
+    pinned_url, extra_headers = pin_url_to_ip(f"{url}/api2/json/version", resolved_ip)
+    hostname = urlparse(url).hostname or ""
+
+    try:
+        async with secure_outbound_client(verify=body.verify_ssl, timeout=10.0) as client:
+            r = await client.get(pinned_url, headers=extra_headers)
             # 401 = Proxmox antwortet, aber erfordert Auth → trotzdem erreichbar
             if r.status_code == 200:
                 version = r.json().get("data", {}).get("version", None)
@@ -260,7 +294,8 @@ async def test_node_reachability(
                 return {"ok": False, "error": f"HTTP {r.status_code}"}
             return {"ok": True, "version": version}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        log.warning("test-node probe failed for host=%s: %s", hostname, exc)
+        return {"ok": False, "error": "connection_failed"}
 
 
 @router.post("/admin", status_code=201)
@@ -298,7 +333,32 @@ async def setup_node(
     body: SetupNodeRequest,
     _: str | None = Depends(_require_setup_access),
 ) -> dict:
-    """Save the first (default) Proxmox node (Step 2)."""
+    """Save the first (default) Proxmox node (Step 2).
+
+    Defense-in-depth: rejects URLs pointing to loopback / link-local
+    (incl. IMDS) / multicast so an attacker cannot persist a malicious
+    target during the unauthenticated setup window.
+    """
+    from backend.core.http_client import validate_setup_target_url
+    from backend.services.audit_service import write_audit_log
+
+    try:
+        validate_setup_target_url(body.url)
+    except ValueError as exc:
+        try:
+            await write_audit_log(
+                event_type="setup_target_blocked",
+                username=None,
+                auth_type=None,
+                detail=f"setup_node rejected: {exc}",
+            )
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Target address blocked",
+        )
+
     existing = await get_default_node()
     if existing:
         node = await update_node(
