@@ -19,17 +19,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Core ist der Default — bekommt :<version>, :latest und :core
+          # PROJ-72 Phase B (v1.75.0-beta): nur noch Core wird aus diesem Repo gebaut.
+          # Die Plus-Edition ist ab v1.75.0-beta nicht mehr Teil dieses öffentlichen
+          # Core-Repos — sie wird unabhängig aus dem privaten p3portal-plus-Repo nach
+          # ghcr.io/p3portal-org/p3portal-plus gepusht (siehe docs/repo-split-migration.md).
+          # Der frühere Plus-Matrix-Eintrag ist deshalb entfernt; sonst hätte er nur
+          # ein Stub-only-Image unter :plus überschrieben und Nutzer verwirrt.
           - edition: core
             version_suffix: ""
             moving_tags: |
               latest
               core
-          # Plus ist opt-in — bekommt :<version>-plus und :plus
-          - edition: plus
-            version_suffix: "-plus"
-            moving_tags: |
-              plus
 
     steps:
       - name: Checkout
