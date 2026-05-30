@@ -350,11 +350,18 @@ class ProxmoxClient:
         name: str,
         description: str = "",
         vm_type: str = "qemu",
+        vmstate: bool = False,
     ) -> str:
-        """Create a snapshot. Returns the task UPID."""
+        """Create a snapshot. Returns the task UPID.
+
+        ``vmstate=True`` includes RAM-state (only meaningful for ``qemu`` on a
+        running VM; ignored by Proxmox for LXC / stopped VMs).
+        """
         body: dict = {"snapname": name}
         if description:
             body["description"] = description
+        if vmstate and vm_type == "qemu":
+            body["vmstate"] = 1
         async with self._client() as client:
             resp = await client.post(
                 f"{self._vm_base(node, vmid, vm_type)}/snapshot",

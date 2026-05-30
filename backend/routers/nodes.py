@@ -168,6 +168,12 @@ async def remove_node(
     except Exception:
         pass
 
+    # PROJ-77: Auto-Snapshot-Jobs für diesen Node deaktivieren
+    try:
+        await plus_behavior.on_node_deleted_auto_snapshots(node_id, current_user.username)
+    except Exception:
+        pass
+
     deleted = await delete_node(node_id)
     if not deleted:
         total = await count_nodes()

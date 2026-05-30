@@ -293,10 +293,13 @@ The Plus image embeds the same Core code plus the proprietary `backend/plus/` / 
 | Multi-node / multi-cluster | — | — | ✓ |
 | Resource pools with quotas | — | — | ✓ |
 | Approval workflow (4-eyes) | — | — | ✓ |
+| Per-node permission scopes (view tasks / view backups / upload ISO) | — | — | ✓ |
 | Playbook permission whitelists | — | — | ✓ |
 | Alert presets & SMTP / webhook | — | — | ✓ |
 | Theme editor (colour picker) | — | — | ✓ |
 | Git sync for playbooks & Packer | — | — | ✓ |
+| VM / LXC config snapshots (JSON snapshot + diff + restore) | — | — | ✓ |
+| Auto-snapshots on schedule (Proxmox-native + config, GFS retention) | — | — | ✓ |
 
 Upload your licence key in **System Settings → Licence** or through the Setup Wizard. Plus-Verkauf is currently inactive — see [COMMERCIAL.md](COMMERCIAL.md).
 

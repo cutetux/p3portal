@@ -118,7 +118,7 @@ _openapi_url = "/api/openapi.json" if settings.expose_api_docs else None
 
 app = FastAPI(
     title="P3 Portal",
-    version="v1.78.2-beta",
+    version="v1.79.1-beta",
     docs_url=_docs_url,
     redoc_url=None,
     openapi_url=_openapi_url,
@@ -238,6 +238,13 @@ try:
     app.include_router(config_snapshots_router)
 except ImportError:
     logger.info("PROJ-74: backend.plus.config_snapshots nicht gefunden – Config-Snapshot-Endpunkte nicht registriert")
+
+# PROJ-77: Auto-Snapshots Router (Plus-only; 404 für Core-Nutzer und unlizenziertes Plus)
+try:
+    from backend.plus.auto_snapshots.router import router as auto_snapshots_router
+    app.include_router(auto_snapshots_router)
+except ImportError:
+    logger.info("PROJ-77: backend.plus.auto_snapshots nicht gefunden – Auto-Snapshot-Endpunkte nicht registriert")
 
 
 @app.get("/api/health", tags=["meta"])

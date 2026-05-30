@@ -255,6 +255,20 @@ SCOPE_MANIFEST: tuple[ScopeManifestEntry, ...] = (
             "<HOST>/api/config-snapshots/1/pve/100/create"
         ),
     ),
+    # PROJ-77: Auto-Snapshots (Schreib-Scope folgt sobald write-EPs nötig werden)
+    ScopeManifestEntry(
+        name="auto_snapshots:read",
+        description_key="scope.auto_snapshots_read.desc",
+        endpoints=(
+            ScopeEndpoint("GET", "/api/auto-snapshots/runs/{run_id}/details", "scope.auto_snapshots_read.ep.run_details"),
+            ScopeEndpoint("GET", "/api/auto-snapshots/native-snapshots", "scope.auto_snapshots_read.ep.native"),
+        ),
+        plus_only=True,
+        curl_example=(
+            'curl -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/auto-snapshots/native-snapshots?portal_node_id=1&proxmox_node=pve&vmid=100&kind=qemu"
+        ),
+    ),
 )
 
 # Lookup-Dict für schnellen Zugriff per Name

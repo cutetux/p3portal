@@ -228,6 +228,12 @@ async def delete_local_user(
     except Exception:
         pass
 
+    # PROJ-77: Auto-Snapshot-Jobs pausieren (paused_ownerless)
+    try:
+        await plus_behavior.on_user_deleted_auto_snapshots(user_id, current_user.username)
+    except Exception:
+        pass
+
     await delete_user(user_id)
     await write_audit_log(
         "user_deleted", current_user.username, current_user.auth_type,

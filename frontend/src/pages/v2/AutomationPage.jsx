@@ -1,5 +1,5 @@
 // p3portal.org
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePlaybooks } from '../../hooks/usePlaybooks'
 import { useScheduledJobs } from '../../hooks/useScheduledJobs'
@@ -83,6 +83,20 @@ export default function AutomationPage() {
   const conflictIds = useGitSyncConflictIds('ansible', isAdmin)
   const myJobCount = jobs.filter(j => j.created_by === username).length
   const sjAtLimit = !scheduledJobsLimit?.unlimited && scheduledJobsLimit?.max !== null && scheduledJobsLimit?.max !== undefined && myJobCount >= scheduledJobsLimit?.max
+
+  // PROJ-77: Deep-Link „/automation?tab=scheduled&openJob=<id>" öffnet das
+  // Detail-Modal automatisch (z.B. aus AutoBadge in PROJ-74-Snapshots).
+  const openJobParam = searchParams.get('openJob')
+  useEffect(() => {
+    if (!openJobParam || sjLoading) return
+    const job = jobs.find(j => j.id === openJobParam)
+    if (job) {
+      setDetailJob(job)
+      const next = new URLSearchParams(searchParams)
+      next.delete('openJob')
+      setSearchParams(next, { replace: true })
+    }
+  }, [openJobParam, sjLoading, jobs, searchParams, setSearchParams])
 
   const visible = role === 'viewer'
     ? playbooks.filter(pb => !pb.required_role)

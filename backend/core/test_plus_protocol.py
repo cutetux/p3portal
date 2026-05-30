@@ -126,6 +126,8 @@ class TestCapabilitiesMap:
             "groups_unlimited", "node_assignments", "owners_unlimited",
             "playbook_permissions",
             "config_snapshots",
+            # PROJ-77: Auto-Snapshots
+            "auto_snapshots",
             # PROJ-64: Self-Approval-Gate (sync, editions-abhängig)
             "allow_self_approval_supported",
         }

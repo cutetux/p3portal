@@ -346,6 +346,8 @@ export default function VmDetailPage() {
                     isOperator={isOperator}
                     isTemplate={detail.is_template}
                     onReload={reloadSnapshots}
+                    portalNodeId={detail.portal_node_id}
+                    kind={type}
                   />
                   <VmBackupSection
                     node={node}

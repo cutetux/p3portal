@@ -342,6 +342,13 @@ async def delete_vm(
                     _node_row.id, pve_node, vmid, vm_type,
                     None, current_user.username,
                 )
+                # PROJ-77: native Auto-Snapshots als rotated/vm_deleted markieren
+                try:
+                    await _pb.on_vm_lxc_deleted_auto_snapshots(
+                        _node_row.id, vmid, vm_type, current_user.username,
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass
         return VmTaskResponse(task_id=task_id)

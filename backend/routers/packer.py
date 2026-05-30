@@ -489,6 +489,13 @@ async def delete_proxmox_template(
                     )
                 except Exception:
                     pass
+                # PROJ-77: native Auto-Snapshots als rotated/vm_deleted markieren
+                try:
+                    await plus_behavior.on_vm_lxc_deleted_auto_snapshots(
+                        node_row.id, vmid, match.get("type", "qemu"), current_user.username,
+                    )
+                except Exception:
+                    pass
                 return Response(status_code=204)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Template-VM {vmid} nicht gefunden")
 
@@ -520,6 +527,13 @@ async def delete_proxmox_template(
                 _node_row.id, match["node"], vmid,
                 match.get("type", "qemu"), None, current_user.username,
             )
+            # PROJ-77: native Auto-Snapshots als rotated/vm_deleted markieren
+            try:
+                await plus_behavior.on_vm_lxc_deleted_auto_snapshots(
+                    _node_row.id, vmid, match.get("type", "qemu"), current_user.username,
+                )
+            except Exception:
+                pass
     except Exception:
         pass
 

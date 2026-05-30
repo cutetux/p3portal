@@ -1,7 +1,70 @@
 // p3portal.org
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createSnapshot, rollbackSnapshot, deleteSnapshot } from '../../api/vms'
 import ConfirmModal from '../common/ConfirmModal'
+// PROJ-77: Auto-Badge für p3auto_*-Snapshots (Plus-only Bulk-Lookup via Registry)
+import { PlusComponents } from '../../plus'
+import { useCapability } from '../../hooks/useCapability'
+
+function SnapshotList({ snapshots, fmtTime, isOperator, isTemplate, busy, setConfirmTarget, autoLookup }) {
+  return (
+    <div className="divide-y divide-gray-100 dark:divide-zinc-800 border border-gray-200 dark:border-zinc-700 rounded overflow-hidden flex-1">
+      {snapshots.map((snap) => {
+        const isAuto = snap.name?.startsWith('p3auto_')
+        const jobId = isAuto ? autoLookup[snap.name] : null
+        return (
+          <div key={snap.name} className="flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-gray-900 dark:text-white font-mono truncate">
+                {snap.name}
+                {isAuto && <InlineAutoBadge jobId={jobId} />}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-zinc-600">
+                {fmtTime(snap.snaptime)}
+                {snap.description ? ` · ${snap.description}` : ''}
+              </p>
+            </div>
+
+            {isOperator && !isTemplate && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => setConfirmTarget({ type: 'rollback', name: snap.name })}
+                  disabled={busy != null}
+                  className="btn-table"
+                >
+                  {busy === `rollback:${snap.name}` ? '…' : 'Rollback'}
+                </button>
+                <button
+                  onClick={() => setConfirmTarget({ type: 'delete', name: snap.name })}
+                  disabled={busy != null}
+                  className="btn-table-danger"
+                >
+                  {busy === `delete:${snap.name}` ? '…' : 'Löschen'}
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function InlineAutoBadge({ jobId }) {
+  const navigate = useNavigate()
+  if (!jobId) return null
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); navigate(`/automation?tab=scheduled&openJob=${jobId}`) }}
+      title="Erstellt durch geplanten Job"
+      className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-portal-info/10 text-portal-info border border-portal-info/30 hover:bg-portal-info/20 transition-colors ml-1"
+    >
+      auto
+    </button>
+  )
+}
 
 const SNAP_NAME_RE = /^[a-zA-Z0-9_-]{1,40}$/
 
@@ -20,7 +83,9 @@ function errMsg(err) {
   return d ?? 'Fehler beim Ausführen der Aktion.'
 }
 
-export default function VmSnapshotSection({ vmid, node, snapshots, isOperator, isTemplate, onReload }) {
+export default function VmSnapshotSection({ vmid, node, snapshots, isOperator, isTemplate, onReload, portalNodeId, kind }) {
+  const hasAutoSnapshots = useCapability('auto_snapshots')
+  const NativeSnapshotBadgeMap = PlusComponents.NativeSnapshotBadgeMap
   const [form, setForm]           = useState({ name: '', description: '' })
   const [nameError, setNameError] = useState('')
   const [creating, setCreating]   = useState(false)
@@ -127,39 +192,29 @@ export default function VmSnapshotSection({ vmid, node, snapshots, isOperator, i
         </div>
       ) : snapshots.length === 0 ? (
         <p className="text-xs text-gray-400 dark:text-zinc-600">Keine Snapshots vorhanden.</p>
+      ) : hasAutoSnapshots && NativeSnapshotBadgeMap && portalNodeId && kind ? (
+        <Suspense fallback={<SnapshotList snapshots={snapshots} fmtTime={fmtTime} isOperator={isOperator} isTemplate={isTemplate} busy={busy} setConfirmTarget={setConfirmTarget} autoLookup={{}} />}>
+          <NativeSnapshotBadgeMap
+            portalNodeId={portalNodeId}
+            proxmoxNode={node}
+            vmid={vmid}
+            kind={kind}
+          >
+            {(lookup) => (
+              <SnapshotList
+                snapshots={snapshots}
+                fmtTime={fmtTime}
+                isOperator={isOperator}
+                isTemplate={isTemplate}
+                busy={busy}
+                setConfirmTarget={setConfirmTarget}
+                autoLookup={lookup}
+              />
+            )}
+          </NativeSnapshotBadgeMap>
+        </Suspense>
       ) : (
-        <div className="divide-y divide-gray-100 dark:divide-zinc-800 border border-gray-200 dark:border-zinc-700 rounded overflow-hidden flex-1">
-          {snapshots.map((snap) => (
-            <div key={snap.name} className="flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-gray-900 dark:text-white font-mono truncate">{snap.name}</p>
-                <p className="text-xs text-gray-400 dark:text-zinc-600">
-                  {fmtTime(snap.snaptime)}
-                  {snap.description ? ` · ${snap.description}` : ''}
-                </p>
-              </div>
-
-              {isOperator && !isTemplate && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => setConfirmTarget({ type: 'rollback', name: snap.name })}
-                    disabled={busy != null}
-                    className="btn-table"
-                  >
-                    {busy === `rollback:${snap.name}` ? '…' : 'Rollback'}
-                  </button>
-                  <button
-                    onClick={() => setConfirmTarget({ type: 'delete', name: snap.name })}
-                    disabled={busy != null}
-                    className="btn-table-danger"
-                  >
-                    {busy === `delete:${snap.name}` ? '…' : 'Löschen'}
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        <SnapshotList snapshots={snapshots} fmtTime={fmtTime} isOperator={isOperator} isTemplate={isTemplate} busy={busy} setConfirmTarget={setConfirmTarget} autoLookup={{}} />
       )}
 
       {confirmTarget && (

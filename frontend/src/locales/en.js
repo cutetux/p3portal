@@ -1485,5 +1485,117 @@ export default {
     orphan_desc: 'Snapshots from VMs/LXCs that have been deleted. Restore is not possible.',
     orphan_empty: 'No orphaned snapshots.',
     orphan_col_orphaned: 'Orphaned at',
+
+    // PROJ-77: Source label for auto-snapshots
+    source_auto: 'auto',
+  },
+
+  // PROJ-77: Auto-Snapshots VM/LXC (Plus-only)
+  auto_snapshots: {
+    action_type: {
+      config: 'Auto Config Snapshot',
+      config_desc: 'Scheduled JSON snapshots of selected VM/LXC configurations into the portal DB (PROJ-74).',
+      vm: 'Auto VM/LXC Snapshot',
+      vm_desc: 'Scheduled native Proxmox snapshots (qm/pct snapshot) with retention.',
+    },
+    target: {
+      title: 'Target selection',
+      tab: {
+        single: 'Single',
+        pool: 'Pool',
+        node: 'Node',
+        tag: 'Tag filter',
+      },
+      kind_filter: 'Kind filter',
+      kind_both: 'VM & LXC',
+      single: {
+        empty: 'No VMs/LXCs found.',
+        truncated: '… and {{count}} more (refine filter).',
+      },
+      pool: {
+        empty: 'No pools available.',
+      },
+      node: {
+        empty: 'No nodes available.',
+      },
+      tag: {
+        hint: 'Matches VMs/LXCs with at least one of the given Proxmox tags (max 10).',
+        placeholder: 'tag-name',
+        max_reached: 'Maximum of 10 tags reached.',
+      },
+    },
+    retention: {
+      title: 'Retention',
+      keep_last: 'Keep last N snapshots',
+      keep_last_hint: 'Per VM/LXC – enforced as a floor and additive with GFS.',
+      gfs: {
+        enable: 'Enable GFS scheme (Grandfather-Father-Son)',
+        daily: 'Daily slots',
+        weekly: 'Weekly slots',
+        monthly: 'Monthly slots',
+      },
+    },
+    config: {
+      skip_if_no_changes: 'Skip if unchanged',
+      skip_if_no_changes_hint: 'Before snapshot, the live config is hashed and compared with the last auto-snapshot of the same VM.',
+    },
+    vm: {
+      include_ram: 'Include RAM state (QEMU/running only)',
+      include_ram_hint: 'For LXC or stopped VMs, vmstate is silently omitted.',
+      max_parallel: 'Parallel snapshot operations',
+      max_parallel_hint: '1–10 concurrent snapshot operations per run.',
+    },
+    badge: {
+      auto: 'auto',
+      tooltip: 'Created by scheduled job – click for details',
+    },
+    runs: {
+      summary: {
+        total: 'Targets',
+        created: 'Created',
+        failed: 'Failed',
+        rotated: 'Rotated',
+        skipped_nochg: 'Skipped (unchanged)',
+        skipped_lock: 'Skipped (locked)',
+        skipped_owner: 'Skipped (owner)',
+        status: 'Status',
+      },
+      status: {
+        success: 'Success',
+        partial_success: 'Partial success',
+        failed: 'Failed',
+        skipped: 'Skipped',
+      },
+      col: {
+        node: 'Node',
+        vmid: 'VMID',
+        kind: 'Kind',
+        status: 'Status',
+        snapname: 'Snapname',
+      },
+      no_entries: 'No per-VM details available.',
+      failed_details: 'Show {{count}} failure details',
+    },
+    run_entry: {
+      created: 'created',
+      rotated: 'rotated',
+      skipped_no_change: 'unchanged',
+      skipped_locked: 'locked',
+      skipped_not_owner: 'not owner',
+      failed: 'failed',
+    },
+    warn: {
+      prefix_collision_title: 'Pre-existing p3auto_ snapshots detected',
+      prefix_collision: 'Proxmox contains snapshots with prefix "p3auto_" without a corresponding DB entry. These are ignored and never rotated.',
+      prefix_collision_more: '… and {{count}} more',
+      paused_ownerless: 'Job paused: owner deleted.',
+    },
+    permission: {
+      admin_or_owner: 'Admin or owner of all target VMs required.',
+    },
+    validation: {
+      no_target: 'At least one target required (Single, Pool, Node or Tag).',
+      gfs_requires_tier: 'When GFS is enabled, at least one keep_* must be > 0.',
+    },
   },
 }

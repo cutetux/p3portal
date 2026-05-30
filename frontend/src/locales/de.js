@@ -1485,5 +1485,117 @@ export default {
     orphan_desc: 'Snapshots von VMs/LXCs, die gelöscht wurden. Restore nicht möglich.',
     orphan_empty: 'Keine verwaisten Snapshots vorhanden.',
     orphan_col_orphaned: 'Verwaist am',
+
+    // PROJ-77: Source-Label für auto-Snapshots
+    source_auto: 'auto',
+  },
+
+  // PROJ-77: Auto-Snapshots VM/LXC (Plus-only)
+  auto_snapshots: {
+    action_type: {
+      config: 'Auto Config-Snapshot',
+      config_desc: 'Konfiguration ausgewählter VMs/LXCs zeitgesteuert als JSON-Snapshot in die Portal-DB sichern (PROJ-74).',
+      vm: 'Auto VM/LXC-Snapshot',
+      vm_desc: 'Native Proxmox-Snapshots (qm/pct snapshot) zeitgesteuert mit Retention anlegen.',
+    },
+    target: {
+      title: 'Ziel-Auswahl',
+      tab: {
+        single: 'Einzeln',
+        pool: 'Pool',
+        node: 'Node',
+        tag: 'Tag-Filter',
+      },
+      kind_filter: 'Typ-Filter',
+      kind_both: 'VM & LXC',
+      single: {
+        empty: 'Keine VMs/LXCs gefunden.',
+        truncated: '… und {{count}} weitere (Filter verfeinern).',
+      },
+      pool: {
+        empty: 'Keine Pools vorhanden.',
+      },
+      node: {
+        empty: 'Keine Nodes vorhanden.',
+      },
+      tag: {
+        hint: 'Trifft VMs/LXCs mit mindestens einem der angegebenen Proxmox-Tags (max. 10).',
+        placeholder: 'tag-name',
+        max_reached: 'Maximal 10 Tags möglich.',
+      },
+    },
+    retention: {
+      title: 'Aufbewahrung (Retention)',
+      keep_last: 'Behalte zuletzt N Snapshots',
+      keep_last_hint: 'Pro VM/LXC – wird als Floor garantiert und gilt zusätzlich zu GFS.',
+      gfs: {
+        enable: 'GFS-Schema aktivieren (Grandfather-Father-Son)',
+        daily: 'Tägliche Slots',
+        weekly: 'Wöchentliche Slots',
+        monthly: 'Monatliche Slots',
+      },
+    },
+    config: {
+      skip_if_no_changes: 'Überspringen wenn unverändert',
+      skip_if_no_changes_hint: 'Vor dem Snapshot wird die Live-Config gehasht und mit dem letzten Auto-Snapshot derselben VM verglichen.',
+    },
+    vm: {
+      include_ram: 'RAM-Status einbeziehen (nur QEMU/running)',
+      include_ram_hint: 'Bei LXC oder gestoppter VM wird vmstate stillschweigend nicht gesetzt.',
+      max_parallel: 'Parallele Snapshot-Operationen',
+      max_parallel_hint: '1–10 gleichzeitige Snapshot-Operationen pro Run.',
+    },
+    badge: {
+      auto: 'auto',
+      tooltip: 'Erstellt durch geplanten Job – klicken für Details',
+    },
+    runs: {
+      summary: {
+        total: 'Ziele',
+        created: 'Erstellt',
+        failed: 'Fehlgeschlagen',
+        rotated: 'Rotiert',
+        skipped_nochg: 'Übersprungen (keine Änderung)',
+        skipped_lock: 'Übersprungen (gesperrt)',
+        skipped_owner: 'Übersprungen (Owner)',
+        status: 'Status',
+      },
+      status: {
+        success: 'Erfolgreich',
+        partial_success: 'Teilweise erfolgreich',
+        failed: 'Fehlgeschlagen',
+        skipped: 'Übersprungen',
+      },
+      col: {
+        node: 'Node',
+        vmid: 'VMID',
+        kind: 'Typ',
+        status: 'Status',
+        snapname: 'Snapname',
+      },
+      no_entries: 'Keine Per-VM-Details verfügbar.',
+      failed_details: '{{count}} Fehler-Details anzeigen',
+    },
+    run_entry: {
+      created: 'erstellt',
+      rotated: 'rotiert',
+      skipped_no_change: 'keine Änderung',
+      skipped_locked: 'gesperrt',
+      skipped_not_owner: 'kein Owner',
+      failed: 'Fehler',
+    },
+    warn: {
+      prefix_collision_title: 'Pre-existierende p3auto_-Snapshots gefunden',
+      prefix_collision: 'In Proxmox wurden Snapshots mit Prefix „p3auto_" gefunden, die keinen korrespondierenden DB-Eintrag haben. Diese werden ignoriert und nicht rotiert.',
+      prefix_collision_more: '… und {{count}} weitere',
+      paused_ownerless: 'Job pausiert: Owner gelöscht.',
+    },
+    permission: {
+      admin_or_owner: 'Admin oder Owner aller Ziel-VMs erforderlich.',
+    },
+    validation: {
+      no_target: 'Mindestens ein Ziel erforderlich (Einzeln, Pool, Node oder Tag).',
+      gfs_requires_tier: 'Bei aktiviertem GFS muss mindestens ein keep_* > 0 sein.',
+    },
   },
 }

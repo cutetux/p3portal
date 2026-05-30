@@ -52,8 +52,13 @@ class ScheduledJobCreateRequest(BaseModel):
     @field_validator("job_type")
     @classmethod
     def valid_type(cls, v: str) -> str:
-        if v not in ("playbook", "ssh", "power_action"):
-            raise ValueError("job_type muss 'playbook', 'ssh' oder 'power_action' sein")
+        # PROJ-68 ergänzt 'git_sync'; PROJ-77 ergänzt 'auto_config_snapshot' + 'auto_vm_snapshot'.
+        allowed = {
+            "playbook", "ssh", "power_action", "git_sync",
+            "auto_config_snapshot", "auto_vm_snapshot",
+        }
+        if v not in allowed:
+            raise ValueError(f"job_type muss eines von {sorted(allowed)} sein")
         return v
 
     @field_validator("cron_expression")

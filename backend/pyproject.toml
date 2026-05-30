@@ -1,0 +1,14 @@
+# p3portal.org
+# pytest configuration for the backend test suite.
+#
+# Why session-scoped fixture loop:
+# testcontainers' PostgresContainer fixture is session-scoped. With the default
+# function-scoped event loop, an AsyncEngine opened by the session fixture in
+# loop A becomes unusable when loop A closes after the first test, manifesting
+# as "Event loop is closed" on subsequent tests (CI #3 against v1.78.2-beta).
+# A session-scoped fixture loop keeps the engine/connection pool consistent
+# with the testcontainer's lifetime. SQLite tests are unaffected because
+# aiosqlite is lightweight enough to recreate per test.
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "session"

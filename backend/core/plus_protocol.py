@@ -135,6 +135,7 @@ class PlusProtocol(Protocol):
     def can_use_owners_unlimited(self) -> bool: ...
     def can_use_git_sync(self) -> bool: ...
     def can_use_config_snapshots(self) -> bool: ...
+    def can_use_auto_snapshots(self) -> bool: ...
 
     # ── Limit-Hooks (int | None) ─────────────────────────────────────────────
 
@@ -285,6 +286,22 @@ class PlusProtocol(Protocol):
         self, node_id, actor_username: str
     ) -> int: ...
 
+    # ── Auto-Snapshots-Hooks (PROJ-77) ───────────────────────────────────────
+
+    async def on_user_deleted_auto_snapshots(
+        self, user_id: int, actor_username: str
+    ) -> int: ...
+
+    async def on_vm_lxc_deleted_auto_snapshots(
+        self, portal_node_id: int, vmid: int, kind: str, actor_username: str
+    ) -> int: ...
+
+    async def on_node_deleted_auto_snapshots(
+        self, node_id, actor_username: str
+    ) -> int: ...
+
+    def get_auto_snapshot_approval_action_types(self) -> list[str]: ...
+
     # ── PROJ-74: Config-Snapshot Lifecycle-Hooks ─────────────────────────────
 
     async def on_vm_lxc_deleted_config_snapshots(
@@ -387,6 +404,9 @@ class CorePlusBehavior:
         return False
 
     def can_use_config_snapshots(self) -> bool:
+        return False
+
+    def can_use_auto_snapshots(self) -> bool:
         return False
 
     # ── Limit-Hooks ──────────────────────────────────────────────────────────
@@ -626,6 +646,27 @@ class CorePlusBehavior:
     ) -> int:
         return 0
 
+    # ── Auto-Snapshots-Hooks (PROJ-77) Core-Defaults ────────────────────────
+
+    async def on_user_deleted_auto_snapshots(
+        self, user_id: int, actor_username: str
+    ) -> int:
+        return 0
+
+    async def on_vm_lxc_deleted_auto_snapshots(
+        self, portal_node_id: int, vmid: int, kind: str, actor_username: str
+    ) -> int:
+        return 0
+
+    async def on_node_deleted_auto_snapshots(
+        self, node_id, actor_username: str
+    ) -> int:
+        return 0
+
+    def get_auto_snapshot_approval_action_types(self) -> list[str]:
+        # Core: keine Approval-Integration für Auto-Snapshots
+        return []
+
     # ── PROJ-74: Config-Snapshot Lifecycle-Hooks (Core: no-ops) ─────────────
 
     async def on_vm_lxc_deleted_config_snapshots(
@@ -763,6 +804,7 @@ CAPABILITIES: dict[str, str] = {
     "owners_unlimited":               "can_use_owners_unlimited",
     "playbook_permissions":           "can_use_playbook_permissions",
     "config_snapshots":               "can_use_config_snapshots",
+    "auto_snapshots":                 "can_use_auto_snapshots",
     # PROJ-64: Self-Approval-Gate (sync, editions-abhängig)
     "allow_self_approval_supported":  "allow_self_approval_supported",
 }
