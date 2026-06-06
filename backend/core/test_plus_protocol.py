@@ -128,6 +128,8 @@ class TestCapabilitiesMap:
             "config_snapshots",
             # PROJ-77: Auto-Snapshots
             "auto_snapshots",
+            # PROJ-76: Stacks (deklaratives Infrastructure-Modell)
+            "stacks",
             # PROJ-64: Self-Approval-Gate (sync, editions-abhängig)
             "allow_self_approval_supported",
         }
