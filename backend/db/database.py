@@ -122,6 +122,9 @@ async def _migrate_db(conn) -> None:
         ("nodes", "admin_token_secret TEXT NOT NULL DEFAULT ''"),
         ("nodes", "packer_token_id TEXT NOT NULL DEFAULT ''"),
         ("nodes", "packer_token_secret TEXT NOT NULL DEFAULT ''"),
+        # PROJ-76 Phase 2a: 5. OpenTofu-Token-Tier (Core-Schema-additiv, Engine-Nutzung Plus-only)
+        ("nodes", "tofu_token_id TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "tofu_token_secret TEXT NOT NULL DEFAULT ''"),
         # PROJ-9
         ("jobs", "api_key_id INTEGER"),
         ("jobs", "callback_url TEXT"),

@@ -189,6 +189,92 @@ class ProxmoxClient:
             resp.raise_for_status()
             return resp.json().get("data", [])
 
+    # ── Node form-helper reads (PROJ-76 Stacks: bridges / cpu-types / tags) ───
+
+    async def get_node_bridges(self, auth: ProxmoxAuth, node: str) -> list[str]:
+        """Return the bridge interface names on a node (Linux + OVS bridges).
+
+        We fetch all interfaces and filter in code on the interface ``type`` —
+        the ``?type=any_bridge`` query param is rejected by older PVE versions.
+        """
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/nodes/{node}/network",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", []) or []
+        names: list[str] = []
+        for i in data:
+            if not isinstance(i, dict):
+                continue
+            iface = i.get("iface")
+            if not iface:
+                continue
+            typ = str(i.get("type", "")).lower()
+            # Lenient: matcht 'bridge'/'OVSBridge'/'any_bridge' (alle enthalten
+            # 'bridge') und – falls 'type' fehlt/abweicht – Bridge-typische Namen.
+            if "bridge" in typ or iface.startswith("vmbr") or iface.startswith("ovsbr"):
+                names.append(iface)
+        return sorted(set(names))
+
+    async def get_node_cpu_types(self, auth: ProxmoxAuth, node: str) -> list[str]:
+        """Return the available QEMU CPU model names on a node."""
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/nodes/{node}/capabilities/qemu/cpu",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", []) or []
+        names = [c.get("name") for c in data if isinstance(c, dict) and c.get("name")]
+        return sorted(set(names))
+
+    async def get_used_tags(self, auth: ProxmoxAuth, node: str | None = None) -> list[str]:
+        """Return the tags currently used by guests (optionally only on one node).
+
+        Proxmox stores tags as a ';'-separated string per VM/LXC in cluster resources.
+        """
+        resources = await self.get_cluster_resources_v2(auth, "vm")
+        tags: set[str] = set()
+        for r in resources:
+            if node and r.get("node") != node:
+                continue
+            raw = r.get("tags") or ""
+            for t in str(raw).replace(",", ";").split(";"):
+                t = t.strip()
+                if t:
+                    tags.add(t)
+        return sorted(tags)
+
+    async def get_nodes_with_swap(self, auth: ProxmoxAuth) -> list[dict]:
+        """Like get_cluster_resources_v2('node') but enriched with swap usage.
+
+        /cluster/resources carries no swap; we fan out to /nodes/{node}/status
+        for each online node (single client, parallel) and merge swap.used /
+        swap.total. Nodes without swap report total 0 → frontend hides the bar.
+        Per-node failures are ignored (swap stays 0).
+        """
+        nodes = await self.get_cluster_resources_v2(auth, "node")
+        online = [n for n in nodes if n.get("status") == "online" and n.get("node")]
+        if online:
+            kwargs = self._auth_kwargs(auth)
+            async with self._client() as client:
+                async def _add_swap(n: dict) -> None:
+                    try:
+                        resp = await client.get(
+                            f"{self._base}/api2/json/nodes/{n['node']}/status",
+                            **kwargs,
+                        )
+                        resp.raise_for_status()
+                        swap = resp.json().get("data", {}).get("swap", {}) or {}
+                        n["swap"] = swap.get("used", 0)
+                        n["maxswap"] = swap.get("total", 0)
+                    except Exception:
+                        pass
+                await asyncio.gather(*[_add_swap(n) for n in online])
+        return nodes
+
     async def get_cluster_status_v2(self, auth: ProxmoxAuth) -> list[dict]:
         """Fetch cluster status entries (mixed cluster + node records)."""
         async with self._client() as client:
@@ -520,11 +606,95 @@ class ProxmoxClient:
             return resp.json().get("data", [])
 
     async def get_datacenter_backup_jobs(self, auth: ProxmoxAuth) -> list[dict]:
-        """Return datacenter-wide backup schedules. Returns [] on 403 (no permission)."""
+        """Return datacenter-wide backup schedules. Returns [] on 403 (no permission).
+        Used by PROJ-29 VM-detail read-only view — silences 403 intentionally."""
         try:
             async with self._client() as client:
                 resp = await client.get(
                     f"{self._base}/api2/json/cluster/backup",
+                    **self._auth_kwargs(auth),
+                )
+                resp.raise_for_status()
+                return resp.json().get("data", [])
+        except httpx.HTTPStatusError:
+            return []
+
+    async def list_backup_jobs(self, auth: ProxmoxAuth) -> tuple[list[dict], bool]:
+        """Return (jobs, permission_denied).
+
+        Unlike get_datacenter_backup_jobs this does NOT silence 403 — the router uses
+        the permission_denied flag to show an informative error instead of crashing.
+        Used by PROJ-78 Backup-Job-Verwaltung.
+        """
+        try:
+            async with self._client() as client:
+                resp = await client.get(
+                    f"{self._base}/api2/json/cluster/backup",
+                    **self._auth_kwargs(auth),
+                )
+                resp.raise_for_status()
+                return resp.json().get("data", []), False
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
+                return [], True
+            raise
+
+    async def create_backup_job(self, auth: ProxmoxAuth, params: dict) -> dict:
+        """Create a new datacenter-wide Proxmox backup job (PROJ-78).
+
+        Returns the created job record.
+        """
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/api2/json/cluster/backup",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            return resp.json().get("data") or {}
+
+    async def update_backup_job(self, auth: ProxmoxAuth, job_id: str, params: dict) -> None:
+        """Fully replace a Proxmox backup job (PROJ-78). PUT replaces all editable fields."""
+        async with self._client() as client:
+            resp = await client.put(
+                f"{self._base}/api2/json/cluster/backup/{job_id}",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def delete_backup_job(self, auth: ProxmoxAuth, job_id: str) -> None:
+        """Delete a datacenter-wide Proxmox backup job schedule (PROJ-78).
+
+        Only removes the schedule — does NOT touch existing backup files.
+        """
+        async with self._client() as client:
+            resp = await client.delete(
+                f"{self._base}/api2/json/cluster/backup/{job_id}",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def run_backup_now(self, auth: ProxmoxAuth, node: str, params: dict) -> str:
+        """Start an vzdump backup run on a specific node using pre-built params (PROJ-78).
+
+        Returns the task UPID.
+        """
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/api2/json/nodes/{node}/vzdump",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            return resp.json().get("data", "")
+
+    async def get_pools(self, auth: ProxmoxAuth) -> list[dict]:
+        """Return all Proxmox pools (PROJ-78 — for Pool-Auswahl Dropdown)."""
+        try:
+            async with self._client() as client:
+                resp = await client.get(
+                    f"{self._base}/api2/json/pools",
                     **self._auth_kwargs(auth),
                 )
                 resp.raise_for_status()

@@ -33,7 +33,7 @@ Local portal users get Proxmox access through three dedicated service accounts �
 |---|---|---|
 | `viewer` | `portal-viewer@pve` | `VM.Audit`, `VM.GuestAgent.Audit`, `Pool.Audit`, `Sys.Audit`, `Datastore.Audit` |
 | `operator` | `portal-operator@pve` | viewer perms + `VM.PowerMgmt`, `VM.Snapshot` |
-| `admin` | `portal-admin@pve` | operator perms + `VM.Allocate`, `VM.Clone`, `VM.Config.{CPU,Memory,Disk,Network,HWType,Options,Cloudinit,CDROM}`, `Datastore.AllocateSpace`, `SDN.Use`, **`Sys.Audit`**, **`Sys.Modify`** |
+| `admin` | `portal-admin@pve` | operator perms + `VM.Allocate`, `VM.Clone`, `VM.Backup`, `VM.Config.{CPU,Memory,Disk,Network,HWType,Options,Cloudinit,CDROM}`, `Datastore.Allocate`, `Datastore.AllocateSpace`, `SDN.Use`, **`Sys.Audit`**, **`Sys.Modify`** |
 
 > **`VM.GuestAgent.Audit`** is required for IP display and SSH-check of QEMU VMs in the dashboard. Without it, QEMU IPs and SSH status will be missing (LXC containers are not affected — they use a different API endpoint).
 
@@ -55,10 +55,10 @@ pveum role add PortalOperator \
   --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,Pool.Audit,Datastore.Audit"
 
 pveum role add PortalAdmin \
-  --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,\
+  --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Backup,\
 VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,\
 VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,\
-Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,\
+Datastore.Allocate,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,\
 Sys.Audit,Sys.Modify"
 
 # 3. Assign roles cluster-wide (path `/`, propagate to children)
@@ -79,7 +79,7 @@ If the roles already exist, use `modify` to update the permission list:
 ```bash
 pveum role modify PortalViewer   --privs "VM.Audit,VM.GuestAgent.Audit,Pool.Audit,Sys.Audit,Datastore.Audit"
 pveum role modify PortalOperator --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,Pool.Audit,Datastore.Audit"
-pveum role modify PortalAdmin    --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,Sys.Audit,Sys.Modify"
+pveum role modify PortalAdmin    --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Backup,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.Allocate,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,Sys.Audit,Sys.Modify"
 ```
 
 ### Setup via Web UI
@@ -97,6 +97,7 @@ pveum role modify PortalAdmin    --privs "VM.Audit,VM.GuestAgent.Audit,VM.PowerM
 | `Permission check failed (/vms/X, VM.Config.Memory|VM.Config.CPU|…)` | `VM.Config.*` on `PortalAdmin` | `pveum role modify PortalAdmin` |
 | QEMU IPs not visible / SSH check failing | `VM.GuestAgent.Audit` missing | Patch all three roles |
 | Storage pools empty in node details | `Datastore.Audit` on viewer/operator | Patch `PortalViewer` / `PortalOperator` |
+| `Keine Berechtigung für Backup-Job-Verwaltung` / 403 when saving a backup job | `VM.Backup` + `Datastore.Allocate` on `PortalAdmin` | `pveum role modify PortalAdmin` (see above); creating/editing `/cluster/backup` jobs needs `Sys.Modify` + `Datastore.Allocate` + `VM.Backup` on `/` |
 | APT update list empty / 403 on refresh | `Sys.Modify` missing on `PortalAdmin` | `pveum role modify PortalAdmin` (see above); `Sys.Modify` is required by Proxmox even for reading the update list |
 
 ### Verify
@@ -215,6 +216,63 @@ cp packer/<your-template>/files/installuser.pub packer/<your-template>/files/id_
 The container runs as user `portal` (UID 1001). The `packer/` volume is mounted from the host and owned by a different UID. With `600` only the file owner can read — `portal` cannot access the key and Packer fails with *permission denied*.
 
 Packer uses Go's SSH library (not OpenSSH), which does **not** enforce strict file permissions. `644` is safe enough here because the file only lives inside the container volume.
+
+---
+
+## Part D – OpenTofu engine account *(Plus only, optional)*
+
+Only needed for **Stacks** (P3 Plus). OpenTofu is the engine that turns a
+declarative stack into real VMs. It is a powerful create-and-destroy tool, so it gets
+its **own dedicated least-privilege token** (`PortalTofu`) — separate from the RBAC and
+Packer accounts — so its actions are isolated, cleanly attributed in the Proxmox task
+log, and individually revocable.
+
+> The OpenTofu token is **optional per node**. A node without a `tofu` token stays fully
+> usable; it is simply not stack-deploy-capable. `SDN.Use` is required because attaching a
+> VM to a bridge (even the default `vmbr0`, which lives in the `localnetwork` SDN zone) is a
+> permission-checked SDN action on PVE 8.x. Creating **own** SDN zones remains Phase 3.
+
+### Permissions
+
+| Category | Permission | Why |
+|---|---|---|
+| VM | `VM.Allocate`, `VM.Clone` | Create stack VMs / clone from a template |
+| VM | `VM.Config.{CPU,Memory,Disk,Network,HWType,Options,Cloudinit,CDROM}` | Configure stack VMs |
+| VM | `VM.PowerMgmt`, `VM.Audit` | Start/stop and read VM state for drift detection |
+| Datastore | `Datastore.Allocate`, `Datastore.AllocateSpace` | Allocate disks for stack VMs |
+| Pool | `Pool.Audit` | Read pool membership (stack/pool association) |
+| SDN | `SDN.Use` | Attach a VM NIC to a bridge (PVE 8.x permission-checks `/sdn/zones/.../<bridge>`) |
+
+### Setup via CLI
+
+```bash
+# 1. Create role (least-privilege engine role; more than PortalPacker)
+#    SDN.Use is required for the cloned VM's NIC to attach to a bridge (PVE 8.x).
+pveum role add PortalTofu \
+  --privs "VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,\
+VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,\
+VM.PowerMgmt,VM.Audit,Datastore.Allocate,Datastore.AllocateSpace,Pool.Audit,SDN.Use"
+
+# 2. Create user
+pveum user add portal-tofu@pve --comment "P3 Portal – OpenTofu engine"
+
+# 3. Create API token (note the secret)
+pveum user token add portal-tofu@pve portal-tofu --privsep 0
+
+# 4. Grant the role (propagate from / so it applies to every node)
+pveum acl modify / --user portal-tofu@pve --role PortalTofu --propagate 1
+```
+
+### Verify
+
+```bash
+pveum user permissions portal-tofu@pve
+```
+
+Enter the token under **Setup Wizard → Step 5 (Tokens)** or **System Settings → Nodes →
+Edit node** (the OpenTofu field only appears in a Plus deployment). The secret is stored
+Fernet-encrypted in the portal database and injected into OpenTofu only at runtime via an
+environment variable — it is never written into any `.tf`/state file.
 
 ---
 

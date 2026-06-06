@@ -2,10 +2,13 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { setupTokens, testSetupConnection } from '../../api/setup'
+import { useCapability } from '../../hooks/useCapability'
 
 const VIEWER_PRIVS = 'VM.Audit,VM.GuestAgent.Audit,Pool.Audit,Sys.Audit'
 const OPERATOR_PRIVS = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,Pool.Audit'
-const ADMIN_PRIVS = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,Sys.Audit,Sys.Modify'
+const ADMIN_PRIVS = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Backup,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.Allocate,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,Sys.Audit,Sys.Modify'
+// PROJ-76 Phase 2a: PortalTofu role – least-privilege OpenTofu engine token
+const TOFU_PRIVS = 'VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,VM.PowerMgmt,VM.Audit,Datastore.Allocate,Datastore.AllocateSpace,Pool.Audit,SDN.Use'
 
 function parseTokenId(tokenId) {
   if (!tokenId) return null
@@ -180,6 +183,7 @@ function TokenPair({ label, idKey, secretKey, roleName, privs, form, onChange, n
 
 export default function WizardStep5Tokens({ initial, nodeUrl, nodeVerifySsl, onNext, onBack }) {
   const { t } = useTranslation()
+  const stacksEnabled = useCapability('stacks')  // PROJ-76 Phase 2a (Plus-only)
   const [form, setForm] = useState({
     viewer_token_id: initial?.viewer_token_id ?? 'portal-viewer@pve!portal-viewer',
     viewer_token_secret: initial?.viewer_token_secret ?? '',
@@ -187,6 +191,9 @@ export default function WizardStep5Tokens({ initial, nodeUrl, nodeVerifySsl, onN
     operator_token_secret: initial?.operator_token_secret ?? '',
     admin_token_id: initial?.admin_token_id ?? 'portal-admin@pve!portal-admin',
     admin_token_secret: initial?.admin_token_secret ?? '',
+    // PROJ-76 Phase 2a: optional OpenTofu engine token (only sent/shown when Plus)
+    tofu_token_id: initial?.tofu_token_id ?? '',
+    tofu_token_secret: initial?.tofu_token_secret ?? '',
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -247,6 +254,9 @@ export default function WizardStep5Tokens({ initial, nodeUrl, nodeVerifySsl, onN
       <TokenPair label={t('setup.s5_viewer_label')} idKey="viewer_token_id" secretKey="viewer_token_secret" roleName="Viewer" privs={VIEWER_PRIVS} form={form} onChange={set} nodeUrl={nodeUrl} nodeVerifySsl={nodeVerifySsl} />
       <TokenPair label={t('setup.s5_operator_label')} idKey="operator_token_id" secretKey="operator_token_secret" roleName="Operator" privs={OPERATOR_PRIVS} form={form} onChange={set} nodeUrl={nodeUrl} nodeVerifySsl={nodeVerifySsl} />
       <TokenPair label={t('setup.s5_admin_label')} idKey="admin_token_id" secretKey="admin_token_secret" roleName="Admin" privs={ADMIN_PRIVS} form={form} onChange={set} nodeUrl={nodeUrl} nodeVerifySsl={nodeVerifySsl} />
+      {stacksEnabled && (
+        <TokenPair label={t('setup.s5_tofu_label')} idKey="tofu_token_id" secretKey="tofu_token_secret" roleName="Tofu" privs={TOFU_PRIVS} form={form} onChange={set} nodeUrl={nodeUrl} nodeVerifySsl={nodeVerifySsl} />
+      )}
 
       {/* Verbindungstest mit Viewer-Token */}
       <div className="flex items-center gap-3 pt-1">

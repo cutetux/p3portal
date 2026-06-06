@@ -29,6 +29,10 @@ export async function deleteVm(vmid, node) {
   return data
 }
 
+export async function updateVmConfig(vmid, updates, node) {
+  await api.patch(`/api/vms/${vmid}/config${nodeQuery(node)}`, updates)
+}
+
 export async function getSnapshots(vmid, node) {
   const { data } = await api.get(`/api/vms/${vmid}/snapshots${nodeQuery(node)}`)
   return data

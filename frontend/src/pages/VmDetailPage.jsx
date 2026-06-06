@@ -310,6 +310,20 @@ export default function VmDetailPage() {
                   onActionSuccess={reloadDetail}
                 />
 
+                {/* PROJ-76 Phase 2b: Stack-Hinweis + Link (AC-2B-MUT-1 / AC-2B-UI-9) */}
+                {detail.managed_by_stack && (
+                  <div className="rounded-md border border-portal-accent/40 bg-portal-accent/10 px-4 py-2.5 text-sm text-portal-text flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-portal-accent/20 text-portal-accent">Stack</span>
+                    <span>
+                      Diese VM wird vom Stack{' '}
+                      <Link to={`/stacks/${detail.managed_by_stack.stack_id}`} className="font-medium text-portal-accent hover:underline">
+                        {detail.managed_by_stack.stack_name}
+                      </Link>{' '}
+                      verwaltet. Konfiguration, Disk-Größe und Löschen bitte über den Stack ändern.
+                    </span>
+                  </div>
+                )}
+
                 {/* PROJ-48: Owner-Sektion (portal_node_id aus VmDetailResponse) */}
                 {detail.portal_node_id != null && (
                   <OwnerSection
@@ -324,8 +338,8 @@ export default function VmDetailPage() {
                 {/* Resource bars */}
                 <VmResourceBars detail={detail} />
 
-                {/* Config: base info + network + disks */}
-                <VmConfigSection detail={detail} />
+                {/* Config: base info + network + disks; Stack-VMs: Editor gesperrt (AC-2B-MUT-2) */}
+                <VmConfigSection detail={detail} canEdit={isOperator} onSaved={reloadDetail} managedByStack={detail.managed_by_stack} />
 
                 {/* Guest-Info (QEMU only) */}
                 {type === 'qemu' && (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useMarkNotificationsRead } from '../hooks'
 import NotificationItemRow from './NotificationItemRow'
 import AnnouncementDetailModalSlim from './AnnouncementDetailModalSlim'
 import ClusterTaskDetailModalSlim from './ClusterTaskDetailModalSlim'
@@ -30,6 +31,7 @@ function getModal(item) {
 export default function NotificationTabContent({ tab, items = [], isLoading, highlightId }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { mutate: markRead } = useMarkNotificationsRead()
   const [modalItem, setModalItem] = useState(null)
   const highlightRef = useRef(null)
 
@@ -41,6 +43,10 @@ export default function NotificationTabContent({ tab, items = [], isLoading, hig
   }, [highlightId, items.length])
 
   const handleItemClick = (item) => {
+    // Einzelnes Item beim Öffnen als gelesen markieren (statt Bulk beim Tab-Besuch)
+    if (!item.read) {
+      markRead({ source: item.source, sourceIds: [item.source_id] })
+    }
     const modalType = getModal(item)
     if (modalType) {
       setModalItem(item)

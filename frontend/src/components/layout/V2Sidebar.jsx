@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useLicenseLimits } from '../../hooks/useLicenseLimits'
 import { useCapability } from '../../hooks/useCapability'
 import { useSidebarPins } from '../../features/sidebar_pins/hooks/useSidebarPins'
+import PlusBadge from '../common/PlusBadge'
 import { PlusComponents } from '../../plus'
 // PROJ-64: EC-10 – kein direkter Import aus plus/Approvals/hooks (ESLint)
 const UseApprovalCountHost = PlusComponents.UseApprovalCountHost
@@ -100,6 +101,8 @@ export default function V2Sidebar({ onNavClick }) {
   const isPlus = useCapability('sidebar_pins_extended')
   // PROJ-64: Approval-Workflow-Status aus Capabilities (BUG-64-1 Fix)
   const approvalWorkflowEnabled = useCapability('approval_workflow_enabled')
+  // PROJ-76: Stacks-Nav nur bei aktiver Plus-Capability
+  const canUseStacks = useCapability('stacks')
   const { pins } = useSidebarPins()
 
   const isAdmin = role === 'admin'
@@ -157,6 +160,19 @@ export default function V2Sidebar({ onNavClick }) {
             <span>{labelKey ? t(labelKey) : label}</span>
           </NavLink>
         ))}
+
+        {/* PROJ-76: Stacks (Plus-only) */}
+        {!isRestricted && canUseStacks && (
+          <NavLink to="/stacks" className={navLinkCls} onClick={handleClick}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4 h-4 shrink-0">
+              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+              <polyline points="2 17 12 22 22 17" />
+              <polyline points="2 12 12 17 22 12" />
+            </svg>
+            <span className="flex-1">{t('stacks.title')}</span>
+            <PlusBadge className="w-3.5 h-3.5 text-green-500 dark:text-green-400" />
+          </NavLink>
+        )}
 
         {/* Favoriten-Sektion (PROJ-54) – nur sichtbar wenn ≥1 Pin */}
         {!isRestricted && pins.length > 0 && (

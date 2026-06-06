@@ -39,6 +39,7 @@ export default function SshKeyTab() {
   const [jobKeyErr, setJobKeyErr] = useState('')
   const [generatedPublicKey, setGeneratedPublicKey] = useState('')
   const [copiedPubKey, setCopiedPubKey] = useState(false)
+  const [copiedStatusKey, setCopiedStatusKey] = useState(false)
   const [confirmDeleteJobKey, setConfirmDeleteJobKey] = useState(false)
 
   const load = async () => {
@@ -103,6 +104,13 @@ export default function SshKeyTab() {
     navigator.clipboard.writeText(generatedPublicKey).then(() => {
       setCopiedPubKey(true)
       setTimeout(() => setCopiedPubKey(false), 2000)
+    })
+  }
+
+  const handleCopyStatusKey = () => {
+    navigator.clipboard.writeText(jobKeyStatus?.public_key ?? '').then(() => {
+      setCopiedStatusKey(true)
+      setTimeout(() => setCopiedStatusKey(false), 2000)
     })
   }
 
@@ -310,9 +318,9 @@ export default function SshKeyTab() {
             </div>
           )}
 
-          {/* Status-Badge */}
+          {/* Status-Badge + öffentlicher Schlüssel */}
           {!jobKeyMode && !confirmDeleteJobKey && (
-            <div>
+            <div className="space-y-3">
               {jobKeyStatus?.has_key ? (
                 <span className="inline-flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-2.5 py-1 rounded-full font-medium">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3"><polyline points="20 6 9 17 4 12"/></svg>
@@ -320,6 +328,28 @@ export default function SshKeyTab() {
                 </span>
               ) : (
                 <p className="text-xs text-gray-400 dark:text-zinc-500 italic">Noch kein SSH-Job-Key hinterlegt.</p>
+              )}
+
+              {jobKeyStatus?.has_key && jobKeyStatus?.public_key && (
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 mb-1">
+                    Öffentlicher Schlüssel (für <code className="font-mono">~/.ssh/authorized_keys</code> auf den Ziel-Servern):
+                  </p>
+                  <div className="relative">
+                    <textarea
+                      rows={3}
+                      readOnly
+                      value={jobKeyStatus.public_key}
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 px-3 py-2 text-xs font-mono resize-none pr-24"
+                    />
+                    <button
+                      onClick={handleCopyStatusKey}
+                      className="absolute top-2 right-2 text-xs px-2.5 py-1 bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors"
+                    >
+                      {copiedStatusKey ? 'Kopiert!' : 'Kopieren'}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}

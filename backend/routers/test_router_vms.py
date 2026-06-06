@@ -218,6 +218,107 @@ async def test_vm_reboot_success(client: AsyncClient, operator_local_headers: di
     assert resp.status_code == 200
 
 
+# ── VM Config Update (CPU/RAM) ────────────────────────────────────────────────
+
+_PATCH_AUDIT = lambda: patch(  # noqa: E731
+    "backend.routers.vms.write_audit_log", new=AsyncMock(return_value=None)
+)
+
+
+@pytest.mark.asyncio
+async def test_update_vm_config_success(client: AsyncClient, operator_local_headers: dict):
+    captured = {}
+
+    async def _fake_put(_auth, node, vmid, updates, delete_keys=None, vm_type="qemu"):
+        captured.update(updates=updates, delete_keys=delete_keys, vm_type=vm_type)
+
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        _PATCH_AUDIT(),
+        patch("backend.routers.vms.proxmox_client.put_vm_config", new=AsyncMock(side_effect=_fake_put)),
+    ):
+        resp = await client.patch(
+            "/api/vms/100/config",
+            headers=operator_local_headers,
+            json={"cores": 4, "memory": 4096, "onboot": True},
+        )
+    assert resp.status_code == 204
+    assert captured["updates"] == {"cores": 4, "memory": 4096, "onboot": 1}
+
+
+@pytest.mark.asyncio
+async def test_update_vm_config_no_changes_400(client: AsyncClient, operator_local_headers: dict):
+    with (_PATCH_VM_ACCESS_OPERATOR(), _PATCH_AUDIT()):
+        resp = await client.patch("/api/vms/100/config", headers=operator_local_headers, json={})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_update_vm_config_viewer_forbidden(client: AsyncClient, viewer_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.get_user_by_username", new=AsyncMock(return_value=None)),
+    ):
+        resp = await client.patch(
+            "/api/vms/100/config", headers=viewer_local_headers, json={"cores": 2}
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_update_vm_config_sockets_ignored_for_lxc(client: AsyncClient, operator_local_headers: dict):
+    captured = {}
+
+    async def _fake_put(_auth, node, vmid, updates, delete_keys=None, vm_type="lxc"):
+        captured.update(updates=updates, delete_keys=delete_keys)
+
+    with (
+        patch(
+            "backend.routers.vms._resolve_vm_access",
+            new=AsyncMock(return_value=(proxmox_client, _FAKE_AUTH_OPERATOR, "pve1", "lxc")),
+        ),
+        _PATCH_AUDIT(),
+        patch("backend.routers.vms.proxmox_client.put_vm_config", new=AsyncMock(side_effect=_fake_put)),
+    ):
+        resp = await client.patch(
+            "/api/vms/200/config",
+            headers=operator_local_headers,
+            json={"cores": 2, "sockets": 2, "swap": 512},
+        )
+    assert resp.status_code == 204
+    # sockets dropped (LXC), swap kept
+    assert "sockets" not in captured["updates"]
+    assert captured["updates"]["swap"] == 512
+
+
+@pytest.mark.asyncio
+async def test_update_vm_config_clear_description(client: AsyncClient, operator_local_headers: dict):
+    captured = {}
+
+    async def _fake_put(_auth, node, vmid, updates, delete_keys=None, vm_type="qemu"):
+        captured.update(updates=updates, delete_keys=delete_keys)
+
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        _PATCH_AUDIT(),
+        patch("backend.routers.vms.proxmox_client.put_vm_config", new=AsyncMock(side_effect=_fake_put)),
+    ):
+        resp = await client.patch(
+            "/api/vms/100/config", headers=operator_local_headers, json={"description": "  "}
+        )
+    assert resp.status_code == 204
+    assert captured["delete_keys"] == ["description"]
+
+
+@pytest.mark.asyncio
+async def test_update_vm_config_invalid_memory_422(client: AsyncClient, operator_local_headers: dict):
+    with (_PATCH_VM_ACCESS_OPERATOR(), _PATCH_AUDIT()):
+        resp = await client.patch(
+            "/api/vms/100/config", headers=operator_local_headers, json={"memory": 1}
+        )
+    assert resp.status_code == 422
+
+
 # ── Snapshots ─────────────────────────────────────────────────────────────────
 
 _FAKE_SNAPSHOTS = [

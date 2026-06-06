@@ -282,7 +282,7 @@ async def cancel_job(
 ) -> dict:
     async with get_db() as session:
         result = await session.execute(
-            text("SELECT status, username FROM jobs WHERE id = :id"), {"id": job_id}
+            text("SELECT status, username, type, params FROM jobs WHERE id = :id"), {"id": job_id}
         )
         row = result.mappings().fetchone()
 
@@ -294,6 +294,17 @@ async def cancel_job(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Job is not running")
 
     cancel_packer_job(job_id)
+
+    # PROJ-76 Phase 2b: stack apply/destroy → SIGINT the tofu subprocess (graceful).
+    if row["type"] in ("stack_apply", "stack_destroy"):
+        try:
+            from backend.core.plus_protocol import plus_behavior
+            params = json.loads(row["params"] or "{}")
+            stack_id = params.get("stack_id")
+            if stack_id is not None:
+                plus_behavior.cancel_stack_job(int(stack_id))
+        except Exception:
+            pass
 
     async with get_db() as session:
         await session.execute(

@@ -269,6 +269,50 @@ SCOPE_MANIFEST: tuple[ScopeManifestEntry, ...] = (
             "<HOST>/api/auto-snapshots/native-snapshots?portal_node_id=1&proxmox_node=pve&vmid=100&kind=qemu"
         ),
     ),
+    # PROJ-76: Stacks (deklaratives Infrastructure-Modell)
+    ScopeManifestEntry(
+        name="stacks:read",
+        description_key="scope.stacks_read.desc",
+        endpoints=(
+            ScopeEndpoint("GET", "/api/stacks", "scope.stacks_read.ep.list"),
+            ScopeEndpoint("GET", "/api/stacks/{id}", "scope.stacks_read.ep.detail"),
+            ScopeEndpoint("GET", "/api/stacks/{id}/versions", "scope.stacks_read.ep.versions"),
+            ScopeEndpoint("GET", "/api/stacks/{id}/diff", "scope.stacks_read.ep.diff"),
+        ),
+        plus_only=True,
+        curl_example=(
+            'curl -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/stacks"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="stacks:write",
+        description_key="scope.stacks_write.desc",
+        endpoints=(
+            ScopeEndpoint("POST", "/api/stacks", "scope.stacks_write.ep.create"),
+            ScopeEndpoint("PUT", "/api/stacks/{id}", "scope.stacks_write.ep.update"),
+            ScopeEndpoint("POST", "/api/stacks/{id}/restore-version", "scope.stacks_write.ep.restore"),
+        ),
+        plus_only=True,
+        curl_example=(
+            'curl -X POST -H "Authorization: Bearer <KEY>" '
+            '-H "Content-Type: application/json" '
+            '-d \'{"yaml_text":"name: web\\nresources: []"}\' '
+            "<HOST>/api/stacks"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="stacks:delete",
+        description_key="scope.stacks_delete.desc",
+        endpoints=(
+            ScopeEndpoint("DELETE", "/api/stacks/{id}", "scope.stacks_delete.ep.delete"),
+        ),
+        plus_only=True,
+        curl_example=(
+            'curl -X DELETE -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/stacks/1"
+        ),
+    ),
 )
 
 # Lookup-Dict für schnellen Zugriff per Name

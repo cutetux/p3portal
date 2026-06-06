@@ -120,6 +120,9 @@ class SetupTokensRequest(BaseModel):
     # PROJ-55 Step 6: Packer-Token (optional, schreibt in dieselbe nodes-Zeile)
     packer_token_id: str = ""
     packer_token_secret: str = ""
+    # PROJ-76 Phase 2a: OpenTofu-Token (optional, Plus-only Engine-Nutzung)
+    tofu_token_id: str = ""
+    tofu_token_secret: str = ""
 
 
 class SetupPortalRequest(BaseModel):
@@ -417,6 +420,8 @@ async def setup_tokens(
         admin_token_secret=body.admin_token_secret or None,
         packer_token_id=body.packer_token_id or None,
         packer_token_secret=body.packer_token_secret or None,
+        tofu_token_id=body.tofu_token_id or None,
+        tofu_token_secret=body.tofu_token_secret or None,
     )
     return {"ok": True}
 

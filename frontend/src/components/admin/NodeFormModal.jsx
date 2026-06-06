@@ -3,12 +3,15 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createNode, updateNode, testNodeConnection, testNodeToken } from '../../api/nodes'
 import { testSetupConnection } from '../../api/setup'
+import { useCapability } from '../../hooks/useCapability'
 import ModalHelpButton from '../../features/help/components/ModalHelpButton'
 
 const VIEWER_PRIVS   = 'VM.Audit,VM.GuestAgent.Audit,Pool.Audit,Sys.Audit'
 const OPERATOR_PRIVS = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,Pool.Audit'
-const ADMIN_PRIVS    = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,Sys.Audit,Sys.Modify'
+const ADMIN_PRIVS    = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Backup,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.Allocate,Datastore.AllocateSpace,Datastore.Audit,SDN.Use,Pool.Audit,Sys.Audit,Sys.Modify'
 const PACKER_PRIVS   = 'VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.HWType,VM.Config.Network,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,VM.Console,VM.PowerMgmt,VM.Audit,VM.GuestAgent.Audit,Datastore.Allocate,Datastore.AllocateSpace,Datastore.AllocateTemplate,Datastore.Audit,SDN.Use'
+// PROJ-76 Phase 2a: PortalTofu role – least-privilege OpenTofu engine token
+const TOFU_PRIVS     = 'VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,VM.PowerMgmt,VM.Audit,Datastore.Allocate,Datastore.AllocateSpace,Pool.Audit,SDN.Use'
 
 function parseNodeUrl(fullUrl) {
   if (!fullUrl) return { host: '', port: '' }
@@ -135,6 +138,8 @@ const EMPTY = {
   operator_token_id: 'portal-operator@pve!portal-operator', operator_token_secret: '',
   admin_token_id:    'portal-admin@pve!portal-admin',       admin_token_secret: '',
   packer_token_id:   'portal-packer@pve!portal-packer',     packer_token_secret: '',
+  // PROJ-76 Phase 2a: optional OpenTofu engine token (only shown/sent when Plus)
+  tofu_token_id:     '',                                     tofu_token_secret: '',
   cluster_nodes: [],
 }
 
@@ -334,6 +339,7 @@ function ClusterNodesSection({ clusterNodes, onChange }) {
 export default function NodeFormModal({ node, onClose, onSaved }) {
   const { t } = useTranslation()
   const isEdit = Boolean(node)
+  const stacksEnabled = useCapability('stacks')  // PROJ-76 Phase 2a (Plus-only)
   const initialClusterNodes = isEdit ? (node.cluster_nodes ?? []) : []
 
   const ROLES = [
@@ -341,6 +347,8 @@ export default function NodeFormModal({ node, onClose, onSaved }) {
     { key: 'operator', roleName: 'Operator', privs: OPERATOR_PRIVS, label: t('admin.nodes.role_operator_label'), hint: t('admin.nodes.role_operator_hint'),  required: false },
     { key: 'admin',    roleName: 'Admin',    privs: ADMIN_PRIVS,    label: t('admin.nodes.role_admin_label'),    hint: t('admin.nodes.role_admin_hint'),     required: false },
     { key: 'packer',   roleName: 'Packer',   privs: PACKER_PRIVS,   label: t('admin.nodes.role_packer_label'),   hint: t('admin.nodes.role_packer_hint'),    required: false },
+    // PROJ-76 Phase 2a: OpenTofu engine token – Plus-only, optional per node
+    ...(stacksEnabled ? [{ key: 'tofu', roleName: 'Tofu', privs: TOFU_PRIVS, label: t('admin.nodes.role_tofu_label'), hint: t('admin.nodes.role_tofu_hint'), required: false }] : []),
   ]
 
   const _parsed = isEdit ? parseNodeUrl(node.url) : null
@@ -354,6 +362,7 @@ export default function NodeFormModal({ node, onClose, onSaved }) {
         operator_token_id: node.operator_token_id ?? '',  operator_token_secret: '',
         admin_token_id:    node.admin_token_id    ?? '',  admin_token_secret: '',
         packer_token_id:   node.packer_token_id   ?? '',  packer_token_secret: '',
+        tofu_token_id:     node.tofu_token_id     ?? '',  tofu_token_secret: '',
         cluster_nodes: initialClusterNodes,
       }
     : { ...EMPTY }
@@ -444,7 +453,7 @@ export default function NodeFormModal({ node, onClose, onSaved }) {
       const { host, port, ...rest } = form
     const payload = { ...rest, url: buildNodeUrl(host, port), cluster_nodes: isCluster ? form.cluster_nodes : [] }
       if (isEdit) {
-        const secretFields = ['viewer_token_secret', 'operator_token_secret', 'admin_token_secret', 'packer_token_secret']
+        const secretFields = ['viewer_token_secret', 'operator_token_secret', 'admin_token_secret', 'packer_token_secret', 'tofu_token_secret']
         for (const f of secretFields) {
           if (!payload[f]) delete payload[f]
         }

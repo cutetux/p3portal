@@ -233,6 +233,9 @@ nodes = Table(
     Column("admin_token_secret", String, nullable=False, server_default=""),
     Column("packer_token_id", String, nullable=False, server_default=""),
     Column("packer_token_secret", String, nullable=False, server_default=""),
+    # PROJ-76 Phase 2a: 5. OpenTofu-Token-Tier (optional je Node, wie packer)
+    Column("tofu_token_id", String, nullable=False, server_default=""),
+    Column("tofu_token_secret", String, nullable=False, server_default=""),
     Column("cluster_nodes", String, nullable=False, server_default=""),  # PROJ-26
     Column("poll_interval", Integer, nullable=False, server_default="30"),  # PROJ-33
     Column("is_default", Integer, nullable=False, server_default="0"),

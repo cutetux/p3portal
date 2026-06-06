@@ -32,6 +32,11 @@ ARG EDITION=plus
 
 ARG PACKER_VERSION=1.11.2
 
+# PROJ-76 Phase 2a: OpenTofu engine + bpg/proxmox provider (Plus-only, MPL-2.0).
+# Pinned; the exact patch + SHA256 are verified at build time (SHA256SUMS file).
+ARG OPENTOFU_VERSION=1.9.1
+ARG BPG_PROVIDER_VERSION=0.78.2
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_ROOT_USER_ACTION=ignore
 
@@ -73,6 +78,37 @@ RUN mkdir -p "${PACKER_PLUGIN_PATH}"
 
 # packer-plugin-proxmox installieren (benötigt Netzwerkzugriff beim Build)
 RUN packer plugins install github.com/hashicorp/proxmox || true
+
+# ── PROJ-76 Phase 2a: OpenTofu engine + bpg/proxmox provider offline mirror ───
+# Plus-only: gated behind EDITION!=core so the Core image stays 100% AGPLv3 and
+# tofu-free (tools/verify-core-build.sh enforces absence). OpenTofu and the
+# provider are both MPL-2.0 (see docs/opentofu-foundation.md for the NOTICE).
+# The provider is mirrored into the image at build time (needs network, like
+# the packer plugin above); at runtime `tofu init` resolves it purely from the
+# local mirror — no call to registry.opentofu.org (air-gapped, Edge Case 1).
+RUN if [ "$EDITION" != "core" ]; then \
+        set -eux; \
+        cd /tmp; \
+        curl -fsSL "https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_amd64.zip" -o "tofu_${OPENTOFU_VERSION}_linux_amd64.zip"; \
+        curl -fsSL "https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_SHA256SUMS" -o tofu_SHA256SUMS; \
+        grep "tofu_${OPENTOFU_VERSION}_linux_amd64.zip" tofu_SHA256SUMS | sha256sum -c -; \
+        unzip -o "tofu_${OPENTOFU_VERSION}_linux_amd64.zip" -d /usr/local/bin/ tofu; \
+        chmod +x /usr/local/bin/tofu; \
+        rm -f "tofu_${OPENTOFU_VERSION}_linux_amd64.zip" tofu_SHA256SUMS; \
+        mkdir -p /opt/tofu/plugin-mirror /tmp/mirror-cfg; \
+        printf 'terraform {\n  required_providers {\n    proxmox = {\n      source  = "bpg/proxmox"\n      version = "%s"\n    }\n  }\n}\n' "${BPG_PROVIDER_VERSION}" > /tmp/mirror-cfg/providers.tf; \
+        ( cd /tmp/mirror-cfg && tofu providers mirror -platform=linux_amd64 /opt/tofu/plugin-mirror ); \
+        rm -rf /tmp/mirror-cfg; \
+        printf 'provider_installation {\n  filesystem_mirror {\n    path = "/opt/tofu/plugin-mirror"\n  }\n}\n' > /opt/tofu/tofurc; \
+        chmod -R a+rX /opt/tofu; \
+        echo "PROJ-76: OpenTofu ${OPENTOFU_VERSION} + bpg/proxmox ${BPG_PROVIDER_VERSION} bundled (EDITION=$EDITION)"; \
+    else \
+        echo "PROJ-76: OpenTofu skipped (EDITION=core)"; \
+    fi
+
+# Global tofu CLI config → forces filesystem_mirror (air-gapped). Harmless in
+# the Core image: no tofu binary exists there to read it.
+ENV TF_CLI_CONFIG_FILE=/opt/tofu/tofurc
 
 # Anwendungscode
 COPY backend/ ./backend/

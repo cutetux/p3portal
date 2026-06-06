@@ -1,4 +1,6 @@
 // p3portal.org
+import { useState } from 'react'
+import VmConfigEditModal from './VmConfigEditModal'
 
 function KvRow({ label, value }) {
   return (
@@ -24,14 +26,39 @@ function BoolBadge({ value }) {
     : <span className="text-xs font-mono text-gray-400 dark:text-zinc-500">Nein</span>
 }
 
-export default function VmConfigSection({ detail }) {
+export default function VmConfigSection({ detail, canEdit = false, onSaved, managedByStack = null }) {
   const osLabel = OS_LABELS[detail.ostype] ?? detail.ostype ?? '–'
+  const [editing, setEditing] = useState(false)
+  // PROJ-76 Phase 2b: Stack-VMs werden über die Stack-Definition bearbeitet (AC-2B-MUT-2).
+  const stackLocked = !!managedByStack
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-5 py-4">
-      <h2 className="text-xs font-medium text-gray-500 dark:text-zinc-500 uppercase tracking-wider mb-4">
-        Konfiguration
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-medium text-gray-500 dark:text-zinc-500 uppercase tracking-wider">
+          Konfiguration
+        </h2>
+        {canEdit && !detail.is_template && (
+          stackLocked ? (
+            <span
+              title="Diese VM gehört zu einem Stack – Konfiguration über den Stack bearbeiten."
+              className="btn-table flex items-center gap-1.5 opacity-50 cursor-not-allowed"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 0h10.5a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H6.75a1.5 1.5 0 0 1-1.5-1.5v-6a1.5 1.5 0 0 1 1.5-1.5Z" />
+              </svg>
+              Stack-verwaltet
+            </span>
+          ) : (
+            <button onClick={() => setEditing(true)} className="btn-table flex items-center gap-1.5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
+              </svg>
+              Bearbeiten
+            </button>
+          )
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -126,6 +153,15 @@ export default function VmConfigSection({ detail }) {
           </pre>
         </div>
       )}
+
+      {editing && (
+        <VmConfigEditModal
+          detail={detail}
+          onClose={() => setEditing(false)}
+          onSaved={onSaved}
+        />
+      )}
+      <span className="rq hidden" aria-hidden="true" />
     </div>
   )
 }

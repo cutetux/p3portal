@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 
 import httpx
@@ -40,6 +41,7 @@ from backend.services.local_auth import get_user_by_username
 from backend.services.settings_service import get_setting
 
 router = APIRouter(prefix="/api/cluster", tags=["cluster"])
+logger = logging.getLogger(__name__)
 
 
 # ── PROJ-38: LXC Template request schemas ────────────────────────────────────
@@ -208,7 +210,7 @@ async def get_nodes(
                 node_id=nr.id,
                 endpoint="nodes",
                 ttl=nr.poll_interval,
-                fetch_fn=lambda _c=c, _a=a: _c.get_cluster_resources_v2(_a, "node"),
+                fetch_fn=lambda _c=c, _a=a: _c.get_nodes_with_swap(_a),
             ) for nr, c, a in portal_clients],
             return_exceptions=True,
         )
@@ -243,7 +245,7 @@ async def get_nodes(
         core_client = ProxmoxClient(base_url=default_node.url, verify_ssl=default_node.verify_ssl) if default_node else proxmox_client
 
         async def _fetch_core_nodes():
-            return await core_client.get_cluster_resources_v2(auth, "node")
+            return await core_client.get_nodes_with_swap(auth)
 
         try:
             raw = await cluster_cache.get_or_fetch(
@@ -271,10 +273,7 @@ async def get_nodes(
     # Proxmox-login → no cache, direct call
     auth = await _get_cluster_auth(current_user)
     try:
-        if plus:
-            raw = await proxmox_client.get_cluster_resources_v2(auth, "node")
-        else:
-            raw = await proxmox_client.get_cluster_resources_v2(auth, "node")
+        raw = await proxmox_client.get_nodes_with_swap(auth)
     except httpx.HTTPStatusError as exc:
         raise _cluster_http_exc(exc, auth)
     except httpx.RequestError:
@@ -818,6 +817,15 @@ async def get_vm_detail(
     from backend.services.nodes_service import get_node_for_proxmox_name as _get_node_for_name
     portal_node = await _get_node_for_name(node)
 
+    # PROJ-76 Phase 2b: stack-managed badge + serverside mutations-block source.
+    managed_by_stack = None
+    if portal_node is not None:
+        try:
+            from backend.core.plus_protocol import plus_behavior as _pb
+            managed_by_stack = await _pb.get_stack_for_vm(portal_node.id, vmid)
+        except Exception:
+            managed_by_stack = None
+
     return VmDetailResponse(
         vmid=vmid,
         name=vm_status.get("name") or vm_config.get("name", str(vmid)),
@@ -846,6 +854,7 @@ async def get_vm_detail(
         lxc_ostemplate=vm_config.get("ostemplate") if vm_type == "lxc" else None,
         # PROJ-48: expose portal node ID for owner endpoints
         portal_node_id=portal_node.id if portal_node else None,
+        managed_by_stack=managed_by_stack,
     )
 
 
@@ -1345,6 +1354,68 @@ async def _get_client_auth_for_node(
     client = ProxmoxClient(base_url=node_row.url, verify_ssl=node_row.verify_ssl)
     auth = ProxmoxAuth(kind="token", value=token.token_id, secret=token.token_secret)
     return client, auth
+
+
+@router.get("/nodes/{node}/vm-options")
+async def get_node_vm_options(
+    node: str = Path(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Form-helper options for a Proxmox node: bridges, CPU types, used tags.
+
+    Used by the PROJ-76 Stacks form to populate dropdowns. Best-effort: each
+    section degrades to an empty list on per-section errors so the form falls
+    back to free-text input. Read-only via the node's viewer token.
+    """
+    # admin→operator→viewer: reading /nodes/{node}/network (bridges) kann je nach
+    # Token-Setup mehr Recht brauchen als /status – daher das stärkste verfügbare
+    # Read-Token wählen (analog lxc-template-storages / iso_service).
+    if current_user.auth_type == "proxmox":
+        client, auth = await _get_client_auth_for_node(current_user, node)
+    else:
+        from backend.services.nodes_service import get_default_node, get_node_for_proxmox_name
+        node_row = await get_node_for_proxmox_name(node)
+        if node_row is None:
+            node_row = await get_default_node()
+        if node_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No Proxmox node configured",
+            )
+        token = (
+            _extract_token(node_row, "admin")
+            or _extract_token(node_row, "operator")
+            or _extract_token(node_row, "viewer")
+        )
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No service-account token configured for this node",
+            )
+        client = ProxmoxClient(base_url=node_row.url, verify_ssl=node_row.verify_ssl)
+        auth = ProxmoxAuth(kind="token", value=token.token_id, secret=token.token_secret)
+
+    async def _safe(coro, default, label):
+        try:
+            return await coro
+        except Exception as exc:
+            logger.warning("vm-options: %s for node '%s' failed: %s", label, node, exc)
+            return default
+
+    bridges, cpu_types, tags, node_status = await asyncio.gather(
+        _safe(client.get_node_bridges(auth, node), [], "bridges"),
+        _safe(client.get_node_cpu_types(auth, node), [], "cpu_types"),
+        _safe(client.get_used_tags(auth, node), [], "tags"),
+        _safe(client.get_node_status(auth, node), {}, "status"),
+    )
+    status_data = node_status if isinstance(node_status, dict) else {}
+    return {
+        "bridges": bridges,
+        "cpu_types": cpu_types,
+        "tags": tags,
+        "maxcpu": status_data.get("maxcpu"),   # physische Kerne des Nodes
+        "maxmem": status_data.get("maxmem"),   # RAM des Nodes in Bytes
+    }
 
 
 @router.get("/nodes/{node}/tasks")

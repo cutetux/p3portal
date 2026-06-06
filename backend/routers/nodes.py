@@ -36,12 +36,33 @@ def _to_response(n) -> NodeResponse:
         operator_token_id=getattr(n, "operator_token_id", "") or "",
         admin_token_id=getattr(n, "admin_token_id", "") or "",
         packer_token_id=getattr(n, "packer_token_id", "") or "",
+        tofu_token_id=getattr(n, "tofu_token_id", "") or "",
         cluster_nodes=getattr(n, "cluster_nodes", []) or [],
         poll_interval=getattr(n, "poll_interval", 30) or 30,
         is_default=n.is_default,
         created_at=n.created_at,
         created_by=n.created_by,
     )
+
+
+async def _audit_tofu_token_set(node, username: str) -> None:
+    """PROJ-76 Phase 2a: AC-2A-TOKEN-7 – audit when the tofu token is set/changed.
+
+    Never logs the secret – only node identity and the token-ID (non-secret).
+    """
+    try:
+        from backend.services.audit_service import write_audit_log
+        await write_audit_log(
+            event_type="node_tofu_token_set",
+            username=username,
+            auth_type="local",
+            detail=(
+                f"OpenTofu token set for node '{node.name}' "
+                f"(id={node.id}, token_id={node.tofu_token_id or '∅'})"
+            ),
+        )
+    except Exception:
+        pass
 
 
 @router.get("", response_model=list[NodeResponse])
@@ -86,10 +107,15 @@ async def add_node(
         admin_token_secret=body.admin_token_secret,
         packer_token_id=body.packer_token_id,
         packer_token_secret=body.packer_token_secret,
+        tofu_token_id=body.tofu_token_id,
+        tofu_token_secret=body.tofu_token_secret,
         cluster_nodes=body.cluster_nodes,
         poll_interval=body.poll_interval,
         created_by=current_user.username,
     )
+    # PROJ-76 Phase 2a: AC-2A-TOKEN-7 – Audit beim Setzen des tofu-Tokens
+    if body.tofu_token_id or body.tofu_token_secret:
+        await _audit_tofu_token_set(node, current_user.username)
     return _to_response(node)
 
 
@@ -103,6 +129,8 @@ async def edit_node(
         existing = await get_node(node_id)
         if not existing:
             raise HTTPException(status_code=404, detail="Node not found")
+    # PROJ-76 Phase 2a / BUG-76-2A-1: Vorher-Zustand für den Audit-Vergleich.
+    before_node = await get_node(node_id)
     node = await update_node(
         node_id,
         name=body.name,
@@ -119,11 +147,29 @@ async def edit_node(
         admin_token_secret=body.admin_token_secret,
         packer_token_id=body.packer_token_id,
         packer_token_secret=body.packer_token_secret,
+        tofu_token_id=body.tofu_token_id,
+        tofu_token_secret=body.tofu_token_secret,
         cluster_nodes=body.cluster_nodes,
         poll_interval=body.poll_interval,
     )
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
+
+    # PROJ-76 Phase 2a: AC-2A-TOKEN-7 – Audit NUR bei tatsächlicher tofu-Token-Änderung.
+    # BUG-76-2A-1: NodeFormModal sendet die nicht-geheime tofu_token_id bei JEDER Bearbeitung
+    # mit (nur leere Secret-Felder werden weggelassen). Ohne diesen Vergleich erzeugte jede
+    # Node-Bearbeitung (z. B. reines Umbenennen) ein irreführendes "token set"-Audit. Wir
+    # feuern daher nur, wenn ein neues Secret geliefert wurde ODER sich die Token-ID ändert.
+    tofu_changed = (
+        body.tofu_token_secret is not None
+        or (
+            body.tofu_token_id is not None
+            and before_node is not None
+            and body.tofu_token_id != before_node.tofu_token_id
+        )
+    )
+    if tofu_changed:
+        await _audit_tofu_token_set(node, _.username)
 
     # If this is the default node, sync portal_config
     if node.is_default:

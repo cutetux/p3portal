@@ -300,6 +300,7 @@ The Plus image embeds the same Core code plus the proprietary `backend/plus/` / 
 | Git sync for playbooks & Packer | — | — | ✓ |
 | VM / LXC config snapshots (JSON snapshot + diff + restore) | — | — | ✓ |
 | Auto-snapshots on schedule (Proxmox-native + config, GFS retention) | — | — | ✓ |
+| Stacks (declarative VM infrastructure via OpenTofu — plan / deploy / destroy / drift) | — | — | ✓ |
 
 Upload your licence key in **System Settings → Licence** or through the Setup Wizard. Plus-Verkauf is currently inactive — see [COMMERCIAL.md](COMMERCIAL.md).
 

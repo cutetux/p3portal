@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class SnapshotCreateRequest(BaseModel):
@@ -29,6 +29,43 @@ class SnapshotInfo(BaseModel):
 
 class VmTaskResponse(BaseModel):
     task_id: str
+
+
+class VmConfigUpdateRequest(BaseModel):
+    """Resource changes applied to a VM/LXC config (CPU/RAM and a few flags).
+
+    All fields optional; only provided ones are applied as a config diff.
+    ``sockets`` is QEMU-only, ``swap`` is LXC-only — both are ignored for the
+    other type. ``description`` set to an empty string removes the field.
+    """
+    cores: int | None = None
+    sockets: int | None = None      # QEMU only
+    memory: int | None = None       # MB
+    swap: int | None = None         # LXC only, MB
+    onboot: bool | None = None
+    protection: bool | None = None
+    description: str | None = None
+
+    @field_validator("cores", "sockets")
+    @classmethod
+    def positive(cls, v: int | None) -> int | None:
+        if v is not None and not (1 <= v <= 1024):
+            raise ValueError("must be between 1 and 1024")
+        return v
+
+    @field_validator("memory")
+    @classmethod
+    def valid_memory(cls, v: int | None) -> int | None:
+        if v is not None and not (16 <= v <= 4194304):
+            raise ValueError("memory (MB) must be between 16 and 4194304")
+        return v
+
+    @field_validator("swap")
+    @classmethod
+    def valid_swap(cls, v: int | None) -> int | None:
+        if v is not None and not (0 <= v <= 4194304):
+            raise ValueError("swap (MB) must be between 0 and 4194304")
+        return v
 
 
 class ServiceAccountStatusResponse(BaseModel):
@@ -80,6 +117,8 @@ class VmDetailResponse(BaseModel):
     lxc_ostemplate: str | None = None    # LXC only
     # PROJ-48: portal DB node ID (FK on nodes table), needed for owner endpoints
     portal_node_id: int | None = None
+    # PROJ-76 Phase 2b: {stack_id, stack_name} when this VM is stack-managed (else None)
+    managed_by_stack: dict | None = None
 
 
 # ── PROJ-32: Guest-Info & LXC-Interface models ────────────────────────────────
@@ -118,14 +157,121 @@ class BackupFile(BaseModel):
     storage: str          # "local"
 
 
+class BackupRetention(BaseModel):
+    keep_last: int | None = Field(None, ge=0)
+    keep_daily: int | None = Field(None, ge=0)
+    keep_weekly: int | None = Field(None, ge=0)
+    keep_monthly: int | None = Field(None, ge=0)
+
+    def to_proxmox_param(self) -> str | None:
+        """Serialize to Proxmox prune-backups string, e.g. 'keep-last=7,keep-daily=5'."""
+        parts = []
+        if self.keep_last is not None:
+            parts.append(f"keep-last={self.keep_last}")
+        if self.keep_daily is not None:
+            parts.append(f"keep-daily={self.keep_daily}")
+        if self.keep_weekly is not None:
+            parts.append(f"keep-weekly={self.keep_weekly}")
+        if self.keep_monthly is not None:
+            parts.append(f"keep-monthly={self.keep_monthly}")
+        return ",".join(parts) if parts else None
+
+    @classmethod
+    def from_proxmox_param(cls, value: str | None) -> "BackupRetention":
+        """Parse a Proxmox prune-backups string back into structured fields."""
+        if not value:
+            return cls()
+        if not isinstance(value, str):
+            # Some PVE versions / API shapes may return this non-string; coerce defensively.
+            value = str(value)
+        result: dict[str, int] = {}
+        for part in value.split(","):
+            part = part.strip()
+            if "=" in part:
+                k, v = part.split("=", 1)
+                mapping = {
+                    "keep-last": "keep_last",
+                    "keep-daily": "keep_daily",
+                    "keep-weekly": "keep_weekly",
+                    "keep-monthly": "keep_monthly",
+                }
+                if k in mapping:
+                    try:
+                        result[mapping[k]] = int(v)
+                    except ValueError:
+                        pass
+        return cls(**result)
+
+
 class BackupSchedule(BaseModel):
+    """Datacenter-wide Proxmox backup job schedule. Additively extended for PROJ-78."""
     id: str
-    schedule: str         # "0 2 * * *"
+    schedule: str         # "0 2 * * *" or Proxmox calendar event
     storage: str
     mode: str             # "snapshot" | "stop" | "suspend"
     compress: str = ""    # "zstd" | "lzo" | "gzip" | "0"
     enabled: bool = True
     comment: str = ""
+    # VM-selection fields (PROJ-78 — optional, absent in older API responses)
+    vmid: str | None = None      # comma-separated VMID list
+    pool: str | None = None      # Proxmox pool name
+    all: int | None = None       # 1 = all guests
+    exclude: str | None = None   # comma-separated VMIDs to exclude
+    mailto: str | None = None    # email recipient
+    retention: BackupRetention | None = None  # parsed from prune-backups
+
+
+class BackupJobCreateRequest(BaseModel):
+    """Request body for creating or fully replacing a Proxmox backup job (PROJ-78)."""
+    schedule: str
+    storage: str
+    mode: Literal["snapshot", "stop", "suspend"] = "snapshot"
+    compress: Literal["zstd", "lzo", "gzip", "0"] = "zstd"
+    enabled: bool = True
+    comment: str = ""
+    mailto: str = ""
+    # VM-selection: exactly one of all_vms, vmids, pool, or exclude must be set
+    all_vms: bool = False
+    vmids: str = ""     # comma-separated VMIDs, e.g. "100,101,102"
+    pool: str = ""
+    exclude: str = ""   # used with all_vms=True; comma-sep VMIDs to skip
+    retention: BackupRetention = BackupRetention()
+
+    def validate_selection(self) -> None:
+        """Raise ValueError if no VM-selection mode is active."""
+        if not self.all_vms and not self.vmids and not self.pool:
+            raise ValueError("At least one VM-selection mode must be active (all, vmids, or pool)")
+
+    def to_proxmox_params(self) -> dict:
+        """Build the parameter dict for Proxmox POST/PUT /cluster/backup."""
+        params: dict = {
+            "schedule": self.schedule,
+            "storage": self.storage,
+            "mode": self.mode,
+            "compress": self.compress,
+            "enabled": 1 if self.enabled else 0,
+        }
+        if self.comment:
+            params["comment"] = self.comment
+        if self.mailto:
+            params["mailto"] = self.mailto
+        if self.all_vms:
+            params["all"] = 1
+            if self.exclude:
+                params["exclude"] = self.exclude
+        elif self.vmids:
+            params["vmid"] = self.vmids
+        elif self.pool:
+            params["pool"] = self.pool
+        prune = self.retention.to_proxmox_param()
+        if prune:
+            params["prune-backups"] = prune
+        return params
+
+
+class BackupJobUpdateRequest(BackupJobCreateRequest):
+    """Request body for PUT /cluster/backup/{id}. Same fields as Create."""
+    pass
 
 
 class VmBackupsResponse(BaseModel):

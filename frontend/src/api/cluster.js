@@ -81,3 +81,9 @@ export async function getNodeBackups(node) {
   const { data } = await api.get(`/api/cluster/nodes/${encodeURIComponent(node)}/backups`)
   return data
 }
+
+// PROJ-76: Formular-Optionen (Bridges/CPU-Typen/Tags) für einen Proxmox-Node.
+export async function getNodeVmOptions(node) {
+  const { data } = await api.get(`/api/cluster/nodes/${encodeURIComponent(node)}/vm-options`)
+  return data
+}

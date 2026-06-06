@@ -323,6 +323,7 @@ const CORE_PORTAL_PERMISSIONS = [
   'manage_settings',
   'manage_api_keys',
   'manage_help',
+  'manage_backup_jobs',
   'view_logs',
 ]
 

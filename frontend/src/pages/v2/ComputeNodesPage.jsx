@@ -10,6 +10,7 @@ import ComputeVmSection from '../../components/computenodes/ComputeVmSection'
 import ComputeTemplatesTab from '../../components/computenodes/ComputeTemplatesTab'
 import ComputeEventsTab from '../../components/computenodes/ComputeEventsTab'
 import ComputeBackupsTab from '../../components/computenodes/ComputeBackupsTab'
+import ComputeBackupJobsTab from '../../components/computenodes/ComputeBackupJobsTab'
 import UpdatesTab from '../../features/node_updates/components/UpdatesTab'
 import TokenMissingBanner from '../../components/ui/TokenMissingBanner'
 import NodeDetailSection from '../../components/compute/NodeDetailSection'
@@ -61,6 +62,7 @@ const TABS = [
   { id: 'events',           label: 'Ereignisse' },
   { id: 'updates',          label: 'Updates',          nodeAction: 'node:view_updates' },
   { id: 'backups',          label: 'Backups' },
+  { id: 'backup-jobs',      label: 'Backup-Jobs',      perm: 'manage_backup_jobs' },
   { id: 'alerting',         label: 'Alerting',         capKey: 'compute_alerting' },
   { id: 'schedules',        label: 'Scheduled Jobs',   capKey: 'compute_scheduled_jobs' },
   { id: 'config-snapshots', label: 'Config-Snapshots', capKey: 'config_snapshots' },
@@ -189,6 +191,7 @@ export default function ComputeNodesPage() {
                 {TABS.filter(t => {
                   if (t.capKey && !(caps[t.capKey] ?? false)) return false
                   if (t.nodeAction && !isAdmin && role !== 'operator') return false
+                  if (t.perm && !hasPerm(t.perm)) return false
                   return true
                 }).map(tab => {
                   const isActive = activeTab === tab.id
@@ -241,6 +244,7 @@ export default function ComputeNodesPage() {
               {activeTab === 'events'    && <ComputeEventsTab nodeName={selectedNode.node} active={activeTab === 'events'} />}
               {activeTab === 'updates'   && <UpdatesTab portalNodeId={selectedNode.portal_node_id} active={activeTab === 'updates'} />}
               {activeTab === 'backups'   && <ComputeBackupsTab nodeName={selectedNode.node} active={activeTab === 'backups'} />}
+              {activeTab === 'backup-jobs' && <ComputeBackupJobsTab nodeName={selectedNode.node} active={activeTab === 'backup-jobs'} />}
               {activeTab === 'alerting' && (caps.compute_alerting ?? false) && ComputeAlertingTab && (
                 <Suspense fallback={null}>
                   <ComputeAlertingTab nodeName={selectedNode.node} active={activeTab === 'alerting'} />

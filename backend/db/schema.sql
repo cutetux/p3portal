@@ -144,6 +144,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     admin_token_secret TEXT NOT NULL DEFAULT '',
     packer_token_id     TEXT NOT NULL DEFAULT '',
     packer_token_secret TEXT NOT NULL DEFAULT '',
+    tofu_token_id       TEXT NOT NULL DEFAULT '',
+    tofu_token_secret   TEXT NOT NULL DEFAULT '',
     cluster_nodes TEXT    NOT NULL DEFAULT '',
     poll_interval INTEGER NOT NULL DEFAULT 30,
     is_default   INTEGER NOT NULL DEFAULT 0,

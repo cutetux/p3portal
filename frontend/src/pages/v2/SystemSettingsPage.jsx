@@ -740,9 +740,13 @@ export default function SystemSettingsPage() {
   const activeTab = searchParams.get('tab') || 'portal'
   const AlertPresetsTab = PlusComponents.AlertPresetsTab
   const AlertSmtpSection = PlusComponents.AlertSmtpSection
+  // PROJ-76: Verwaiste Stacks (Plus-only, sichtbar bei manage_orphan_stacks)
+  const canUseStacks = useCapability('stacks')
+  const OrphanStacksTab = PlusComponents.OrphanStacksTab
 
   const isAdmin = role === 'admin'
   const perms = portalPermissions ?? []
+  const canManageOrphanStacks = isAdmin || perms.includes('manage_orphan_stacks')
 
   const visibleTabs = TABS.filter(tab => {
     if (tab.plusOnly && !isPlus) return false
@@ -856,6 +860,14 @@ export default function SystemSettingsPage() {
                   <PlusBadge />
                   <Suspense fallback={null}>
                     <ConfigSnapshotOrphanPage embedded />
+                  </Suspense>
+                </div>
+              )}
+              {canUseStacks && canManageOrphanStacks && OrphanStacksTab && (
+                <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg p-6">
+                  <PlusBadge />
+                  <Suspense fallback={null}>
+                    <OrphanStacksTab />
                   </Suspense>
                 </div>
               )}

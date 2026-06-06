@@ -17,7 +17,7 @@ function uptimeLabel(seconds) {
 
 function CompactBar({ label, pct, detail, color = 'orange' }) {
   const clamped = Math.min(100, Math.max(0, pct ?? 0))
-  const barCls = color === 'blue' ? 'bg-blue-500' : color === 'violet' ? 'bg-violet-500' : 'bg-orange-500'
+  const barCls = color === 'blue' ? 'bg-blue-500' : color === 'violet' ? 'bg-violet-500' : color === 'teal' ? 'bg-teal-500' : 'bg-orange-500'
   return (
     <div>
       <div className="flex items-center justify-between text-xs mb-1.5">
@@ -41,6 +41,8 @@ export default function ComputeNodeCard({ node, selected, onClick }) {
   const cpuPct  = (node.cpu ?? 0) * 100
   const ramPct  = node.maxmem  ? (node.mem  / node.maxmem)  * 100 : 0
   const diskPct = node.maxdisk ? (node.disk / node.maxdisk) * 100 : 0
+  const swapPct = node.maxswap ? (node.swap / node.maxswap) * 100 : 0
+  const hasSwap = (node.maxswap ?? 0) > 0
   const isOnline = node.status === 'online'
   const uptime   = uptimeLabel(node.uptime)
 
@@ -106,9 +108,9 @@ export default function ComputeNodeCard({ node, selected, onClick }) {
         </div>
       )}
 
-      {/* Resource bars – 3 columns side by side */}
+      {/* Resource bars – 3 (oder 4 mit Swap) columns side by side */}
       {isOnline && (
-        <div className="grid grid-cols-3 gap-4 pt-3 border-t border-gray-100 dark:border-zinc-800">
+        <div className={`grid ${hasSwap ? 'grid-cols-4' : 'grid-cols-3'} gap-4 pt-3 border-t border-gray-100 dark:border-zinc-800`}>
           <CompactBar
             label="CPU"
             pct={cpuPct}
@@ -127,6 +129,14 @@ export default function ComputeNodeCard({ node, selected, onClick }) {
             detail={`${fmt(node.disk)} / ${fmt(node.maxdisk)}`}
             color="violet"
           />
+          {hasSwap && (
+            <CompactBar
+              label="Swap"
+              pct={swapPct}
+              detail={`${fmt(node.swap)} / ${fmt(node.maxswap)}`}
+              color="teal"
+            />
+          )}
         </div>
       )}
       <span className="rq hidden" aria-hidden="true" />

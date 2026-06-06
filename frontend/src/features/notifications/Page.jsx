@@ -1,9 +1,9 @@
 // p3portal.org
 // PROJ-65: NotificationsHubPage – kombinierte Benachrichtigungs-Seite (/announcements)
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useNotificationTab, useMarkNotificationsRead } from './hooks'
+import { useNotificationTab } from './hooks'
 import NotificationTabContent from './components/NotificationTabContent'
 import MarkAllReadButton from './components/MarkAllReadButton'
 import { usePinToggle } from '../sidebar_pins/hooks/usePinToggle'
@@ -27,26 +27,10 @@ function tabCls(active) {
 
 function TabPanel({ tab, highlightId }) {
   const { data: items = [], isLoading } = useNotificationTab(tab)
-  const { mutate: markRead } = useMarkNotificationsRead()
-  const source = TAB_SOURCE[tab]
-  const markedRef = useRef(false)
 
-  // Bulk-Mark beim Tab-Besuch (einmalig nach Laden)
-  useEffect(() => {
-    if (!isLoading && items.length > 0 && !markedRef.current) {
-      markedRef.current = true
-      const unreadIds = items.filter(i => !i.read).map(i => i.source_id)
-      if (unreadIds.length > 0) {
-        markRead({ source, sourceIds: unreadIds })
-      }
-    }
-  }, [isLoading, items, source, markRead])
-
-  // Reset when tab changes
-  useEffect(() => {
-    markedRef.current = false
-  }, [tab])
-
+  // Kein automatisches Bulk-Mark beim Tab-Besuch: ungelesene Einträge bleiben
+  // sichtbar „neu". Markiert wird einzeln beim Öffnen (NotificationItemRow)
+  // oder gesammelt über den „Alle als gelesen markieren"-Button.
   return (
     <NotificationTabContent
       tab={tab}

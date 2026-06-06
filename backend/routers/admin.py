@@ -234,6 +234,12 @@ async def delete_local_user(
     except Exception:
         pass
 
+    # PROJ-76: Stacks des Users auf Orphan setzen (Plus-Protocol-Hook)
+    try:
+        await plus_behavior.on_user_deleted_stacks(user_id)
+    except Exception:
+        pass
+
     await delete_user(user_id)
     await write_audit_log(
         "user_deleted", current_user.username, current_user.auth_type,
@@ -543,7 +549,7 @@ async def set_proxmox_login_setting(
 
 @router.get("/admin/logs")
 async def list_audit_logs(
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=10000),  # le erhöht für „Alle anzeigen"
     offset: int = Query(default=0, ge=0),
     event_type: str | None = Query(default=None),
     username: str | None = Query(default=None),

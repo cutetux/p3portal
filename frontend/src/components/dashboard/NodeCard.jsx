@@ -41,6 +41,8 @@ export default function NodeCard({ node }) {
   const cpuPct   = (node.cpu ?? 0) * 100
   const ramPct   = node.maxmem  ? (node.mem  / node.maxmem)  * 100 : 0
   const diskPct  = node.maxdisk ? (node.disk / node.maxdisk) * 100 : 0
+  const swapPct  = node.maxswap ? (node.swap / node.maxswap) * 100 : 0
+  const hasSwap  = (node.maxswap ?? 0) > 0
   const isOnline = node.status === 'online'
   const uptime   = uptimeLabel(node.uptime)
 
@@ -116,6 +118,13 @@ export default function NodeCard({ node }) {
             pct={diskPct}
             colorClass="bg-zinc-400"
           />
+          {hasSwap && (
+            <ResourceRow
+              label={`Swap (${fmt(node.swap)} / ${fmt(node.maxswap)})`}
+              pct={swapPct}
+              colorClass="bg-teal-500"
+            />
+          )}
         </div>
       )}
       <span className="rq hidden" aria-hidden="true" />

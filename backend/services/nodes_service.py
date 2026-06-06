@@ -33,6 +33,8 @@ class NodeRow:
     admin_token_secret: str         # plain – NEVER expose
     packer_token_id: str
     packer_token_secret: str        # plain – NEVER expose
+    tofu_token_id: str              # PROJ-76 Phase 2a
+    tofu_token_secret: str          # plain – NEVER expose
     is_default: bool
     created_at: str
     created_by: str
@@ -83,6 +85,8 @@ def _to_node(row) -> NodeRow:
         admin_token_secret=_safe_decrypt(_col("admin_token_secret")),
         packer_token_id=_col("packer_token_id"),
         packer_token_secret=_safe_decrypt(_col("packer_token_secret")),
+        tofu_token_id=_col("tofu_token_id"),
+        tofu_token_secret=_safe_decrypt(_col("tofu_token_secret")),
         is_default=bool(row["is_default"]),
         created_at=row["created_at"],
         created_by=row["created_by"],
@@ -175,6 +179,8 @@ async def create_node(
     admin_token_secret: str = "",
     packer_token_id: str = "",
     packer_token_secret: str = "",
+    tofu_token_id: str = "",
+    tofu_token_secret: str = "",
     cluster_nodes: list[str] | None = None,
     poll_interval: int = 30,
     created_by: str = "system",
@@ -195,6 +201,7 @@ async def create_node(
                 "operator_token_id, operator_token_secret, "
                 "admin_token_id, admin_token_secret, "
                 "packer_token_id, packer_token_secret, "
+                "tofu_token_id, tofu_token_secret, "
                 "cluster_nodes, poll_interval, is_default, created_at, created_by) "
                 "VALUES (:name, :url, :pnode, :ssl, "
                 ":tid, :tsec, "
@@ -202,6 +209,7 @@ async def create_node(
                 ":oid, :osec, "
                 ":aid, :asec, "
                 ":pid, :psec, "
+                ":tofuid, :tofusec, "
                 ":cnodes, :poll, :def, :now, :by)"
             ),
             {
@@ -212,6 +220,7 @@ async def create_node(
                 "oid": operator_token_id, "osec": _enc(operator_token_secret),
                 "aid": admin_token_id,    "asec": _enc(admin_token_secret),
                 "pid": packer_token_id,   "psec": _enc(packer_token_secret),
+                "tofuid": tofu_token_id,  "tofusec": _enc(tofu_token_secret),
                 "cnodes": cluster_nodes_json,
                 "poll": poll_interval,
                 "def": is_def, "now": now, "by": created_by,
@@ -240,6 +249,8 @@ async def update_node(
     admin_token_secret: str | None = None,
     packer_token_id: str | None = None,
     packer_token_secret: str | None = None,
+    tofu_token_id: str | None = None,
+    tofu_token_secret: str | None = None,
     cluster_nodes: list[str] | None = None,
     poll_interval: int | None = None,
 ) -> NodeRow | None:
@@ -262,6 +273,7 @@ async def update_node(
     new_osec    = _resolve_secret(operator_token_secret,  node.operator_token_secret)
     new_asec    = _resolve_secret(admin_token_secret,     node.admin_token_secret)
     new_psec    = _resolve_secret(packer_token_secret,    node.packer_token_secret)
+    new_tofusec = _resolve_secret(tofu_token_secret,      node.tofu_token_secret)
 
     async with get_db() as session:
         await session.execute(
@@ -272,6 +284,7 @@ async def update_node(
                 "operator_token_id=:oid, operator_token_secret=:osec, "
                 "admin_token_id=:aid, admin_token_secret=:asec, "
                 "packer_token_id=:pid, packer_token_secret=:psec, "
+                "tofu_token_id=:tofuid, tofu_token_secret=:tofusec, "
                 "cluster_nodes=:cnodes, poll_interval=:poll "
                 "WHERE id=:id"
             ),
@@ -290,6 +303,8 @@ async def update_node(
                 "asec": new_asec,
                 "pid": packer_token_id   if packer_token_id   is not None else node.packer_token_id,
                 "psec": new_psec,
+                "tofuid": tofu_token_id  if tofu_token_id     is not None else node.tofu_token_id,
+                "tofusec": new_tofusec,
                 "cnodes": new_cluster_nodes,
                 "poll": new_poll_interval,
                 "id": node_id,

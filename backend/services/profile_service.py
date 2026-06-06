@@ -152,6 +152,37 @@ async def get_ssh_job_key_decrypted(username: str) -> str | None:
         return None
 
 
+async def get_ssh_job_public_key(username: str) -> str | None:
+    """Leitet den OpenSSH-Public-Key aus dem gespeicherten (verschlüsselten)
+    Private Key ab – funktioniert für generierte und importierte Keys.
+
+    Gibt None zurück, wenn kein Key hinterlegt ist oder der Private Key nicht
+    geparst werden kann (z.B. passwortgeschützt). Privater Key wird nie nach
+    außen gegeben.
+    """
+    private_pem = await get_ssh_job_key_decrypted(username)
+    if not private_pem:
+        return None
+    from cryptography.hazmat.primitives import serialization
+    data = private_pem.encode()
+    key = None
+    for loader in (serialization.load_ssh_private_key, serialization.load_pem_private_key):
+        try:
+            key = loader(data, password=None)
+            break
+        except Exception:
+            continue
+    if key is None:
+        return None
+    try:
+        public_openssh = key.public_key().public_bytes(
+            serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
+        ).decode()
+    except Exception:
+        return None
+    return f"{public_openssh.strip()} p3portal-job-key"
+
+
 async def generate_ssh_job_keypair(username: str, auth_type: str) -> str:
     """Generiert ein Ed25519-Schlüsselpaar, speichert den privaten Key verschlüsselt
     und gibt den öffentlichen Key (OpenSSH-Format) zurück."""

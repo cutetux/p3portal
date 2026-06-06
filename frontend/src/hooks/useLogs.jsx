@@ -3,13 +3,12 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAuditLogs } from '../api/logs'
 
-export function useAuditLogs({ eventType = '', username = '' } = {}) {
+export function useAuditLogs({ eventType = '', username = '', limit = 100 } = {}) {
   const queryClient = useQueryClient()
   const [offset, setOffset] = useState(0)
-  const limit = 100
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['logs', { offset, eventType, username }],
+    queryKey: ['logs', { offset, limit, eventType, username }],
     queryFn: () => getAuditLogs({
       limit,
       offset,

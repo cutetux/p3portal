@@ -13,6 +13,8 @@ class NodeInfo(BaseModel):
     maxmem: int = 0       # bytes total
     disk: int = 0         # bytes used
     maxdisk: int = 0      # bytes total
+    swap: int = 0         # bytes used
+    maxswap: int = 0      # bytes total (0 = kein Swap auf der Node → Balken ausblenden)
     uptime: int = 0       # seconds
     portal_node_name: str | None = None  # PROJ-30: Portal-Node-Name (z.B. "Production"); None im Single-Node-Betrieb
     portal_node_id: int | None = None    # PROJ-73: Portal-DB-Node-ID für Updates-Tab; None im Single-Node-Betrieb ohne konfigurierte Node

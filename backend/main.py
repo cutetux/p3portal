@@ -29,6 +29,7 @@ from backend.routers import setup as setup_router, nodes as nodes_router
 from backend.routers import user_api_keys as user_api_keys_router
 from backend.routers import announcements as announcements_router
 from backend.routers import alerts as alerts_router
+from backend.routers import backup_jobs as backup_jobs_router
 # PROJ-70: scheduled_jobs_router wird via try/except unten eingehängt (Plus-only)
 from backend.routers import capabilities as capabilities_router
 from backend.core.license import get_license_status
@@ -118,7 +119,7 @@ _openapi_url = "/api/openapi.json" if settings.expose_api_docs else None
 
 app = FastAPI(
     title="P3 Portal",
-    version="v1.79.1-beta",
+    version="v1.81.2-beta",
     docs_url=_docs_url,
     redoc_url=None,
     openapi_url=_openapi_url,
@@ -158,6 +159,7 @@ app.include_router(user_api_keys_router.router)
 app.include_router(announcements_router.router)
 app.include_router(alerts_router.router)
 app.include_router(alerts_router.smtp_router)
+app.include_router(backup_jobs_router.router)  # PROJ-78: Backup-Job-Verwaltung (Core)
 # PROJ-70: Scheduled-Jobs-Router im Plus-Modul; 404 in Pure-Core
 try:
     from backend.plus.scheduled_jobs.router import router as sj_router, settings_router as sj_settings_router
@@ -245,6 +247,13 @@ try:
     app.include_router(auto_snapshots_router)
 except ImportError:
     logger.info("PROJ-77: backend.plus.auto_snapshots nicht gefunden – Auto-Snapshot-Endpunkte nicht registriert")
+
+# PROJ-76: Stacks Router (Plus-only; 404 für Core-Nutzer und unlizenziertes Plus)
+try:
+    from backend.plus.stacks.router import router as stacks_router
+    app.include_router(stacks_router)
+except ImportError:
+    logger.info("PROJ-76: backend.plus.stacks nicht gefunden – Stacks-Endpunkte nicht registriert")
 
 
 @app.get("/api/health", tags=["meta"])

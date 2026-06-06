@@ -124,19 +124,84 @@ function LogPanel({ jobId }) {
   )
 }
 
+const AUDIT_ALL_LIMIT = 10000  // Backend-Cap für „Alle anzeigen"
+
+// PROJ: zieh-/breitenverstellbare Spalten (localStorage-persistent)
+const AUDIT_COLS = [
+  { key: 'time',   label: 'Zeit',     def: 160 },
+  { key: 'event',  label: 'Ereignis', def: 220 },
+  { key: 'user',   label: 'Nutzer',   def: 120 },
+  { key: 'ip',     label: 'IP',       def: 140 },
+  { key: 'detail', label: 'Detail',   def: 420 },
+]
+const AUDIT_COL_LS = 'p3.auditColWidths'
+const AUDIT_COL_MIN = 60
+
+function loadColWidths() {
+  const defaults = Object.fromEntries(AUDIT_COLS.map(c => [c.key, c.def]))
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUDIT_COL_LS) || '{}')
+    return { ...defaults, ...stored }
+  } catch {
+    return defaults
+  }
+}
+
 function AuditLogsTab() {
   const [filterEvent, setFilterEvent] = useState('')
   const [filterUser, setFilterUser] = useState('')
   const [debouncedUser, setDebouncedUser] = useState('')
+  const [pageSize, setPageSize] = useState(100)   // 25 | 50 | 100 | 200 | 'all'
+  const [colWidths, setColWidths] = useState(loadColWidths)
+
+  useEffect(() => {
+    localStorage.setItem(AUDIT_COL_LS, JSON.stringify(colWidths))
+  }, [colWidths])
+
+  const startResize = (key, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = colWidths[key]
+    const onMove = (ev) => {
+      const next = Math.max(AUDIT_COL_MIN, startW + (ev.clientX - startX))
+      setColWidths(w => ({ ...w, [key]: next }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  const tableWidth = AUDIT_COLS.reduce((sum, c) => sum + colWidths[c.key], 0)
+
+  // Header- und Body-Tabelle horizontal synchron halten (Header scrollt nicht
+  // selbst → vertikale Scrollbar beginnt erst unter der Kopfzeile)
+  const headRef = useRef(null)
+  const bodyRef = useRef(null)
+  const syncHeadScroll = () => {
+    if (headRef.current && bodyRef.current) {
+      headRef.current.scrollLeft = bodyRef.current.scrollLeft
+    }
+  }
+
   useEffect(() => {
     const tt = setTimeout(() => setDebouncedUser(filterUser), 300)
     return () => clearTimeout(tt)
   }, [filterUser])
+  const effLimit = pageSize === 'all' ? AUDIT_ALL_LIMIT : pageSize
   const { logs, total, loading, error, refresh, offset, setOffset, limit } = useAuditLogs({
-    eventType: filterEvent, username: debouncedUser,
+    eventType: filterEvent, username: debouncedUser, limit: effLimit,
   })
   const hasPrev = offset > 0
   const hasNext = offset + limit < total
+  const showPager = pageSize !== 'all' && total > limit
 
   return (
     <div className="flex flex-col h-full">
@@ -161,51 +226,91 @@ function AuditLogsTab() {
           {loading ? '…' : '↻'}
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-zinc-900">
-        {error && <div className="m-3 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-700 dark:text-red-400">Fehler beim Laden</div>}
-        {!loading && logs.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-sm text-gray-500 dark:text-zinc-400">Keine Einträge gefunden.</p>
+      {error && <div className="m-3 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-700 dark:text-red-400 shrink-0">Fehler beim Laden</div>}
+      {!loading && logs.length === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-zinc-900">
+          <p className="text-sm text-gray-500 dark:text-zinc-400">Keine Einträge gefunden.</p>
+        </div>
+      )}
+      {logs.length > 0 && (
+        <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-zinc-900">
+          {/* Kopfzeile – scrollt NICHT vertikal (Scrollbar beginnt darunter) */}
+          <div ref={headRef} className="overflow-hidden shrink-0">
+            <table className="text-xs" style={{ tableLayout: 'fixed', width: tableWidth }}>
+              <colgroup>
+                {AUDIT_COLS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
+              </colgroup>
+              <thead className="bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
+                <tr>
+                  {AUDIT_COLS.map((c) => (
+                    <th key={c.key} className="relative text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400 select-none">
+                      <span className="block truncate pr-1">{c.label}</span>
+                      <span
+                        onMouseDown={e => startResize(c.key, e)}
+                        className="absolute top-0 -right-1 h-full w-3 cursor-col-resize hover:bg-orange-400/50 z-10"
+                        title="Spaltenbreite ziehen"
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            </table>
           </div>
-        )}
-        {logs.length > 0 && (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium text-gray-500 dark:text-zinc-400 w-40">Zeit</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400">Ereignis</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400">Nutzer</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400 w-32">IP</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-500 dark:text-zinc-400">Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map(entry => {
-                const date = new Date(entry.created_at)
-                return (
-                  <tr key={entry.id} className="border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/40">
-                    <td className="px-4 py-2 font-mono text-gray-500 dark:text-zinc-500 whitespace-nowrap">
-                      {date.toLocaleDateString('de-DE')} {date.toLocaleTimeString('de-DE')}
-                    </td>
-                    <td className="px-3 py-2 text-gray-800 dark:text-zinc-200">{entry.event_type}</td>
-                    <td className="px-3 py-2 font-mono text-gray-800 dark:text-zinc-200">{entry.username ?? '—'}</td>
-                    <td className="px-3 py-2 font-mono text-gray-500 dark:text-zinc-500">{entry.ip_address ?? '—'}</td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-zinc-500 truncate max-w-xs">{entry.detail ?? '—'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-      {total > limit && (
+          {/* Body – vertikaler + horizontaler Scroll, Kopfzeile folgt synchron */}
+          <div ref={bodyRef} onScroll={syncHeadScroll} className="flex-1 overflow-auto" style={{ scrollbarGutter: 'stable' }}>
+            <table className="text-xs" style={{ tableLayout: 'fixed', width: tableWidth }}>
+              <colgroup>
+                {AUDIT_COLS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
+              </colgroup>
+              <tbody>
+                {logs.map(entry => {
+                  const date = new Date(entry.created_at)
+                  const ts = `${date.toLocaleDateString('de-DE')} ${date.toLocaleTimeString('de-DE')}`
+                  return (
+                    <tr key={entry.id} className="border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/40">
+                      <td className="px-3 py-2 font-mono text-gray-500 dark:text-zinc-500 truncate" title={ts}>{ts}</td>
+                      <td className="px-3 py-2 text-gray-800 dark:text-zinc-200 truncate" title={entry.event_type}>{entry.event_type}</td>
+                      <td className="px-3 py-2 font-mono text-gray-800 dark:text-zinc-200 truncate" title={entry.username ?? ''}>{entry.username ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-gray-500 dark:text-zinc-500 truncate" title={entry.ip_address ?? ''}>{entry.ip_address ?? '—'}</td>
+                      <td className="px-3 py-2 text-gray-500 dark:text-zinc-500 truncate" title={entry.detail ?? ''}>{entry.detail ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {total > 0 && (
         <div className="flex items-center justify-between px-4 py-2 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-950 shrink-0">
-          <span className="text-xs text-gray-500 dark:text-zinc-400">{offset + 1}–{Math.min(offset + limit, total)} von {total}</span>
-          <div className="flex gap-2">
-            <button onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={!hasPrev}
-              className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40">← Zurück</button>
-            <button onClick={() => setOffset(o => o + limit)} disabled={!hasNext}
-              className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40">Weiter →</button>
+          <span className="text-xs text-gray-500 dark:text-zinc-400">
+            {pageSize === 'all'
+              ? `${total} Einträge`
+              : `${offset + 1}–${Math.min(offset + limit, total)} von ${total}`}
+          </span>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
+              Einträge pro Seite:
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value)); setOffset(0) }}
+                className="text-xs border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value="all">Alle</option>
+              </select>
+            </label>
+            {showPager && (
+              <div className="flex gap-2">
+                <button onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={!hasPrev}
+                  className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40">← Zurück</button>
+                <button onClick={() => setOffset(o => o + limit)} disabled={!hasNext}
+                  className="text-xs text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-40">Weiter →</button>
+              </div>
+            )}
           </div>
         </div>
       )}

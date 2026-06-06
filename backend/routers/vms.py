@@ -12,14 +12,50 @@ from backend.models.vms import (
     ServiceAccountStatusResponse,
     SnapshotCreateRequest,
     SnapshotInfo,
+    VmConfigUpdateRequest,
     VmTaskResponse,
 )
+from backend.services.audit_service import write_audit_log
 from backend.services.proxmox import ProxmoxAuth, ProxmoxClient, proxmox_client
 from backend.services.service_accounts import _extract_token, get_service_account_status
 from backend.services.rbac_service import check_permission, has_any_assignments
 from backend.services.local_auth import get_user_by_username
 
 router = APIRouter(prefix="/api", tags=["vms"])
+
+
+async def _assert_not_stack_managed(pve_node: str, vmid: int, username: str, auth_type: str) -> None:
+    """Block single-VM mutations on stack-managed VMs (PROJ-76 Phase 2b, AC-2B-MUT-6).
+
+    Serverside enforcement: CPU/RAM/Disk/Delete on a VM tracked by a stack state
+    must go through the stack definition. Core-mode is a no-op (Plus-Hook → None).
+    Power actions and snapshots are intentionally NOT guarded.
+    """
+    from backend.core.plus_protocol import plus_behavior
+    from backend.services.nodes_service import get_node_for_proxmox_name
+
+    node_row = await get_node_for_proxmox_name(pve_node)
+    if node_row is None:
+        return
+    try:
+        managed = await plus_behavior.get_stack_for_vm(node_row.id, vmid)
+    except Exception:
+        managed = None
+    if managed:
+        await write_audit_log(
+            event_type="stack_vm_mutation_blocked",
+            username=username,
+            auth_type=auth_type,
+            detail=f"vmid={vmid} node={pve_node} stack_id={managed['stack_id']}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "vm_managed_by_stack",
+                "stack_id": managed["stack_id"],
+                "stack_name": managed["stack_name"],
+            },
+        )
 
 
 async def _check_rbac(current_user: CurrentUser, vmid: int, vm_type: str, action: str) -> None:
@@ -239,6 +275,71 @@ async def vm_reboot(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Proxmox API")
 
 
+# ── VM Configuration (CPU / RAM / flags) ──────────────────────────────────────
+
+@router.patch("/vms/{vmid}/config", status_code=status.HTTP_204_NO_CONTENT)
+async def update_vm_config(
+    vmid: int,
+    body: VmConfigUpdateRequest,
+    node: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Apply a CPU/RAM/flag change to a VM or LXC via a single config diff.
+
+    QEMU CPU/RAM changes generally only take effect after a restart unless
+    hot-plug is enabled; LXC changes usually apply live. Requires the
+    ``configure`` action (admin/operator portal-wide, or RBAC assignment).
+    """
+    try:
+        client, auth, pve_node, vm_type = await _resolve_vm_access(current_user, vmid, node)
+        await _check_rbac(current_user, vmid, vm_type, "configure")
+        await _assert_not_stack_managed(pve_node, vmid, current_user.username, current_user.auth_type)
+
+        updates: dict = {}
+        delete_keys: list[str] = []
+
+        if body.cores is not None:
+            updates["cores"] = body.cores
+        if body.memory is not None:
+            updates["memory"] = body.memory
+        if body.onboot is not None:
+            updates["onboot"] = 1 if body.onboot else 0
+        if body.protection is not None:
+            updates["protection"] = 1 if body.protection else 0
+        # QEMU-only
+        if vm_type == "qemu" and body.sockets is not None:
+            updates["sockets"] = body.sockets
+        # LXC-only
+        if vm_type == "lxc" and body.swap is not None:
+            updates["swap"] = body.swap
+        # description: empty string removes the field
+        if body.description is not None:
+            if body.description.strip():
+                updates["description"] = body.description
+            else:
+                delete_keys.append("description")
+
+        if not updates and not delete_keys:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No configuration changes provided",
+            )
+
+        await client.put_vm_config(auth, pve_node, vmid, updates, delete_keys, vm_type)
+
+        changed = sorted([*updates.keys(), *(f"-{k}" for k in delete_keys)])
+        await write_audit_log(
+            event_type="vm_config_updated",
+            username=current_user.username,
+            auth_type=current_user.auth_type,
+            detail=f"{vm_type} {vmid} on {pve_node}: {', '.join(changed)}",
+        )
+    except httpx.HTTPStatusError as exc:
+        _handle_proxmox_error(exc)
+    except httpx.RequestError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Proxmox API")
+
+
 # ── Snapshot Management ───────────────────────────────────────────────────────
 
 @router.get("/vms/{vmid}/snapshots", response_model=list[SnapshotInfo])
@@ -325,6 +426,8 @@ async def delete_vm(
     try:
         client, auth, pve_node, vm_type = await _resolve_vm_access(current_user, vmid, node)
         await _check_rbac(current_user, vmid, vm_type, "delete")
+        # PROJ-76: single-VM delete blocked for stack-managed VMs (use stack destroy).
+        await _assert_not_stack_managed(pve_node, vmid, current_user.username, current_user.auth_type)
         task_id = await client.delete_vm(auth, pve_node, vmid, vm_type)
         # PROJ-64: Pending Approvals für diese VM/LXC canceln (Plus-Protocol-Hook)
         try:

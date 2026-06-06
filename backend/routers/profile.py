@@ -31,6 +31,7 @@ from backend.services.profile_service import (
     delete_ssh_key_entry,
     generate_ssh_job_keypair,
     get_ssh_job_key_status,
+    get_ssh_job_public_key,
     get_ssh_key,
     get_user_profile,
     list_ssh_keys,
@@ -171,7 +172,8 @@ async def get_my_ssh_job_key_status(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> SshJobKeyStatus:
     has_key = await get_ssh_job_key_status(current_user.username)
-    return SshJobKeyStatus(has_key=has_key)
+    public_key = await get_ssh_job_public_key(current_user.username) if has_key else None
+    return SshJobKeyStatus(has_key=has_key, public_key=public_key)
 
 
 @router.put("/ssh-job-key", status_code=204)

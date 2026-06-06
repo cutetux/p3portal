@@ -128,3 +128,59 @@ class TestEmptyMemberState:
         assert state.security_count == 0
         assert state.is_stale is True
         assert state.packages == []
+
+
+class TestSummaryVisibility:
+    """PROJ-73: Dashboard-Badge-Quelle (Summary) zeigt nur admin + zugewiesenen
+    Nutzern (node:view_updates) Einträge; alle anderen bekommen leere Liste."""
+
+    def _node(self, nid=1, name="dc", proxmox_node="pve1"):
+        n = MagicMock()
+        n.id = nid
+        n.name = name
+        n.proxmox_node = proxmox_node
+        n.cluster_nodes = []
+        return n
+
+    @pytest.mark.asyncio
+    async def test_viewer_without_assignment_sees_nothing(self):
+        from backend.features.node_updates.service import get_summary_for_user
+        cu = MagicMock(role="viewer", user_id=5)
+        with (
+            patch("backend.features.node_updates.service.list_nodes",
+                  new=AsyncMock(return_value=[self._node()])),
+            patch("backend.features.node_updates.service.resolve_node_action",
+                  new=AsyncMock(return_value=False)),
+            patch("backend.features.node_updates.service._fetch_member_row",
+                  new=AsyncMock(return_value=None)),
+        ):
+            resp = await get_summary_for_user(cu)
+        assert resp.entries == []
+
+    @pytest.mark.asyncio
+    async def test_admin_sees_entries(self):
+        from backend.features.node_updates.service import get_summary_for_user
+        cu = MagicMock(role="admin", user_id=1)
+        with (
+            patch("backend.features.node_updates.service.list_nodes",
+                  new=AsyncMock(return_value=[self._node()])),
+            patch("backend.features.node_updates.service._fetch_member_row",
+                  new=AsyncMock(return_value=None)),
+        ):
+            resp = await get_summary_for_user(cu)
+        assert len(resp.entries) == 1
+
+    @pytest.mark.asyncio
+    async def test_assigned_viewer_sees_entries(self):
+        from backend.features.node_updates.service import get_summary_for_user
+        cu = MagicMock(role="viewer", user_id=5)
+        with (
+            patch("backend.features.node_updates.service.list_nodes",
+                  new=AsyncMock(return_value=[self._node()])),
+            patch("backend.features.node_updates.service.resolve_node_action",
+                  new=AsyncMock(return_value=True)),
+            patch("backend.features.node_updates.service._fetch_member_row",
+                  new=AsyncMock(return_value=None)),
+        ):
+            resp = await get_summary_for_user(cu)
+        assert len(resp.entries) == 1

@@ -44,7 +44,7 @@ export default function NodeSection({ nodes, loading, selectedNode, onNodeSelect
         ) : nodes.length === 0 ? (
           <p className="text-gray-500 dark:text-zinc-500 text-sm">Keine Nodes gefunden.</p>
         ) : (
-          <div className={`grid gap-4 ${nodes.length === 1 ? 'grid-cols-1' : nodes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          <div className={`grid items-start gap-4 ${nodes.length === 1 ? 'grid-cols-1' : nodes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
             {nodes.map((n) => {
               const isSelected = selectedNode === n.node
               return (

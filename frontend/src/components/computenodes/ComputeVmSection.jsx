@@ -28,11 +28,11 @@ function VmRow({ vm }) {
   const navigate = useNavigate()
   return (
     <tr
-      className="border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
-      onClick={() => navigate(`/vms/${vm.node}/${vm.vmid}`)}
+      className="group border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+      onClick={() => navigate(`/vm/${vm.node}/${vm.type ?? 'qemu'}/${vm.vmid}`)}
     >
       <td className="px-4 py-2.5 text-xs font-mono text-gray-500 dark:text-zinc-500 w-16">{vm.vmid}</td>
-      <td className="px-4 py-2.5 text-xs text-gray-900 dark:text-zinc-100 max-w-[180px] truncate">
+      <td className="px-4 py-2.5 text-xs text-gray-900 dark:text-zinc-100 max-w-[180px] truncate group-hover:text-orange-500 dark:group-hover:text-orange-400 transition-colors">
         {vm.name ?? '–'}
       </td>
       <td className="px-4 py-2.5"><TypeBadge type={vm.type} /></td>

@@ -20,6 +20,9 @@ class NodeCreate(BaseModel):
     admin_token_secret: str = ""
     packer_token_id: str = ""
     packer_token_secret: str = ""
+    # PROJ-76 Phase 2a: OpenTofu engine token (optional per node, Plus-only usage)
+    tofu_token_id: str = ""
+    tofu_token_secret: str = ""
     # PROJ-26: additional PVE node names belonging to the same Proxmox installation
     cluster_nodes: list[str] = []
     # PROJ-33: how often (seconds) cluster data is refreshed from Proxmox
@@ -63,6 +66,9 @@ class NodeUpdate(BaseModel):
     admin_token_secret: str | None = None
     packer_token_id: str | None = None
     packer_token_secret: str | None = None
+    # PROJ-76 Phase 2a
+    tofu_token_id: str | None = None
+    tofu_token_secret: str | None = None
     # PROJ-26: None = don't change; [] = clear all cluster nodes
     cluster_nodes: list[str] | None = None
     # PROJ-33: None = don't change
@@ -100,6 +106,7 @@ class NodeResponse(BaseModel):
     operator_token_id: str = ""
     admin_token_id: str = ""
     packer_token_id: str = ""
+    tofu_token_id: str = ""  # PROJ-76 Phase 2a (secret never returned)
     cluster_nodes: list[str] = []  # PROJ-26
     poll_interval: int = 30        # PROJ-33
     is_default: bool

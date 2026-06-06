@@ -14,6 +14,10 @@ import { Suspense } from 'react'
 import { PlusComponents } from './plus'
 const ApprovalsPage = PlusComponents.ApprovalsPage
 const ApprovalPendingPage = PlusComponents.ApprovalPendingPage
+// PROJ-76: Stacks-Routen via Plus-Registry lazy geladen
+const StacksListPage = PlusComponents.StacksListPage
+const StackEditorPage = PlusComponents.StackEditorPage
+const StackDetailPage = PlusComponents.StackDetailPage
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import PermissionsPage from './pages/PermissionsPage'
 import NotificationsHubPage from './features/notifications/Page'
@@ -86,6 +90,12 @@ function AppRoutes() {
       {/* ── PROJ-50: Approval-Workflow ────────────────────────────────────── */}
       <Route path="/approvals" element={<ProtectedLayout><Suspense fallback={null}><ApprovalsPage /></Suspense></ProtectedLayout>} />
       <Route path="/approvals/pending/:approvalId" element={<ProtectedLayout><Suspense fallback={null}><ApprovalPendingPage /></Suspense></ProtectedLayout>} />
+
+      {/* ── PROJ-76: Stacks (Plus-only; im Core-Build undefined → Redirect) ── */}
+      <Route path="/stacks" element={<ProtectedLayout>{StacksListPage ? <Suspense fallback={null}><StacksListPage /></Suspense> : <Navigate to="/dashboard" replace />}</ProtectedLayout>} />
+      <Route path="/stacks/new" element={<ProtectedLayout>{StackEditorPage ? <Suspense fallback={null}><StackEditorPage /></Suspense> : <Navigate to="/dashboard" replace />}</ProtectedLayout>} />
+      <Route path="/stacks/:id" element={<ProtectedLayout>{StackDetailPage ? <Suspense fallback={null}><StackDetailPage /></Suspense> : <Navigate to="/dashboard" replace />}</ProtectedLayout>} />
+      <Route path="/stacks/:id/edit" element={<ProtectedLayout>{StackEditorPage ? <Suspense fallback={null}><StackEditorPage /></Suspense> : <Navigate to="/dashboard" replace />}</ProtectedLayout>} />
 
       {/* ── Legacy redirects (V1 routes) ─────────────────────────────────── */}
       <Route path="/playbooks" element={<Navigate to="/provisioning" replace />} />

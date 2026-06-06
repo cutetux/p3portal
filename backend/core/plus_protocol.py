@@ -136,6 +136,7 @@ class PlusProtocol(Protocol):
     def can_use_git_sync(self) -> bool: ...
     def can_use_config_snapshots(self) -> bool: ...
     def can_use_auto_snapshots(self) -> bool: ...
+    def can_use_stacks(self) -> bool: ...
 
     # ── Limit-Hooks (int | None) ─────────────────────────────────────────────
 
@@ -164,6 +165,10 @@ class PlusProtocol(Protocol):
     async def get_pool_permissions(self, user_id: int) -> list[PoolGrant]: ...
     async def check_pool_quota(
         self, user_id: int, pool_id: int, deploy_request: dict
+    ) -> QuotaResult: ...
+    async def check_pool_quota_bulk(
+        self, user_id: int, pool_id: int, vm_count: int,
+        total_cores: int, total_ram_mb: int, total_disk_gb: int,
     ) -> QuotaResult: ...
     async def get_existing_pool_ids(self, candidate_ids: set[int]) -> set[int]: ...
     async def on_user_deleted_pools(self, user_id: int, actor_username: str) -> int: ...
@@ -326,6 +331,21 @@ class PlusProtocol(Protocol):
         self, snapshot_id: str
     ) -> int: ...
 
+    # ── PROJ-76: Stacks-Hooks ────────────────────────────────────────────────
+
+    async def on_user_deleted_stacks(self, user_id: int) -> int: ...
+
+    def get_stack_approval_action_types(self) -> list[str]: ...
+
+    async def on_stack_deleted_cancel_approvals(self, stack_id: int) -> int: ...
+
+    # ── PROJ-76 Phase 2b: Mutations-Block-Lookup ─────────────────────────────
+    async def get_stack_for_vm(
+        self, portal_node_id: int, vmid: int
+    ) -> dict | None: ...
+
+    def cancel_stack_job(self, stack_id: int) -> bool: ...
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CorePlusBehavior – vollständige Core-Edition-Defaults
@@ -409,6 +429,9 @@ class CorePlusBehavior:
     def can_use_auto_snapshots(self) -> bool:
         return False
 
+    def can_use_stacks(self) -> bool:
+        return False
+
     # ── Limit-Hooks ──────────────────────────────────────────────────────────
 
     def get_max_users(self) -> int | None:
@@ -474,6 +497,12 @@ class CorePlusBehavior:
 
     async def check_pool_quota(
         self, user_id: int, pool_id: int, deploy_request: dict
+    ) -> QuotaResult:
+        return QuotaResult(allowed=True)
+
+    async def check_pool_quota_bulk(
+        self, user_id: int, pool_id: int, vm_count: int,
+        total_cores: int, total_ram_mb: int, total_disk_gb: int,
     ) -> QuotaResult:
         return QuotaResult(allowed=True)
 
@@ -687,6 +716,26 @@ class CorePlusBehavior:
     ) -> int:
         return 0
 
+    # ── PROJ-76: Stacks-Hooks (Core: no-ops) ────────────────────────────────
+
+    async def on_user_deleted_stacks(self, user_id: int) -> int:
+        return 0
+
+    def get_stack_approval_action_types(self) -> list[str]:
+        return []
+
+    async def on_stack_deleted_cancel_approvals(self, stack_id: int) -> int:
+        return 0
+
+    # ── PROJ-76 Phase 2b: Mutations-Block-Lookup (Core: None, no-op) ─────────
+    async def get_stack_for_vm(
+        self, portal_node_id: int, vmid: int
+    ) -> dict | None:
+        return None
+
+    def cancel_stack_job(self, stack_id: int) -> bool:
+        return False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher – schaltet pro Aufruf zwischen Core und Plus
@@ -805,6 +854,7 @@ CAPABILITIES: dict[str, str] = {
     "playbook_permissions":           "can_use_playbook_permissions",
     "config_snapshots":               "can_use_config_snapshots",
     "auto_snapshots":                 "can_use_auto_snapshots",
+    "stacks":                         "can_use_stacks",
     # PROJ-64: Self-Approval-Gate (sync, editions-abhängig)
     "allow_self_approval_supported":  "allow_self_approval_supported",
 }

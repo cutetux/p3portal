@@ -103,6 +103,7 @@ class ProfileResponse(BaseModel):
 
 class SshJobKeyStatus(BaseModel):
     has_key: bool
+    public_key: str | None = None   # aus dem gespeicherten Private Key abgeleitet
 
 
 class SshJobKeyRequest(BaseModel):

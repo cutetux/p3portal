@@ -339,9 +339,9 @@ test('AC-HUB-5: "Alle markieren"-Button sendet POST /api/notifications/read', as
   }
 })
 
-// ── AC-READ-1: Tab-Besuch markiert ungelesene automatisch ────────────────────
+// ── AC-READ-1: Tab-Besuch markiert NICHT automatisch; Klick markiert einzeln ──
 
-test('AC-READ-1: Tab-Besuch sendet POST /read für ungelesene Items', async ({ page }) => {
+test('AC-READ-1: Tab-Besuch sendet kein /read; Klick auf Item markiert es einzeln', async ({ page }) => {
   await setToken(page, ADMIN_TOKEN)
 
   const readRequests = []
@@ -357,9 +357,16 @@ test('AC-READ-1: Tab-Besuch sendet POST /read für ungelesene Items', async ({ p
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.waitForTimeout(1000)
 
-  // Bulk-Mark beim Tab-Besuch (kann 0 sein wenn keine ungelesenen)
-  const annReadRequests = readRequests.filter(r => r.source === 'announcement')
-  expect(annReadRequests.length).toBeGreaterThanOrEqual(0)
+  // Reiner Tab-Besuch darf nichts als gelesen markieren (ungelesene bleiben sichtbar)
+  expect(readRequests.length).toBe(0)
+
+  // Klick auf das ungelesene Item „Wartungsfenster" markiert genau dieses
+  await page.getByText('Wartungsfenster').first().click()
+  await page.waitForTimeout(500)
+
+  const annReads = readRequests.filter(r => r.source === 'announcement')
+  expect(annReads.length).toBe(1)
+  expect(annReads[0].source_ids).toContain('1')
 })
 
 // ── AC-READ-2: Gelesene Items bleiben dauerhaft sichtbar ─────────────────────
