@@ -11,7 +11,22 @@ from __future__ import annotations
 
 import pytest
 
+from pathlib import Path
+
 from backend.features.api_surface.deps import UPK_SCOPE_MARKER_ATTR
+
+
+def _plus_code_present() -> bool:
+    """True wenn echter Plus-Code im Build liegt (Sentinel wie in conftest).
+
+    Im Core-only-Build ist backend/plus/ ein leerer Stub → Plus-Router (auch
+    einzelne Plus-Endpoints gemischter Scopes wie ansible_inventory) sind nicht
+    gemountet, ihre Routen fehlen erwartungsgemäß.
+    """
+    import backend
+
+    plus_dir = Path(backend.__file__).resolve().parent / "plus"
+    return (plus_dir / "alerts_plus.py").is_file()
 
 
 def _scopes_of_route(route) -> set[str]:
@@ -99,6 +114,8 @@ _EXPECTED = {
 @pytest.mark.parametrize("key,expected", list(_EXPECTED.items()))
 def test_endpoint_carries_expected_scope(route_scopes, key, expected):
     scopes = route_scopes.get(key)
+    if scopes is None and not _plus_code_present():
+        pytest.skip(f"Route {key} im Core-only-Build nicht gemountet (Plus-Endpoint)")
     assert scopes is not None, f"Route {key} nicht gefunden"
     assert expected in scopes, f"Route {key}: erwartet {expected!r}, gefunden {scopes!r}"
 

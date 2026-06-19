@@ -285,6 +285,11 @@ The Plus image embeds the same Core code plus the proprietary `backend/plus/` / 
 | Ansible playbook runner | ✓ | ✓ | ✓ |
 | Packer template builder | ✓ | ✓ | ✓ |
 | Job history & live logs | ✓ | ✓ | ✓ |
+| Network management (Linux bridges & VLANs) | ✓ | ✓ | ✓ |
+| SDN management (zones / VNets / subnets) | ✓ | ✓ | ✓ |
+| Proxmox firewall (datacenter / node / VM rules, security groups, IP sets) | ✓ | ✓ | ✓ |
+| VM disk management (attach / resize / remove) | ✓ | ✓ | ✓ |
+| 30-day Plus trial (one-time, unlocks all Plus features) | ✓ | ✓ | ✓ |
 | Scheduled jobs | — | ✓ up to 3 | ✓ |
 | User accounts | ✓ up to 6 | ✓ up to 6 | ✓ |
 | User groups & teams | ✓ up to 3 | ✓ up to 3 | ✓ |
@@ -300,9 +305,14 @@ The Plus image embeds the same Core code plus the proprietary `backend/plus/` / 
 | Git sync for playbooks & Packer | — | — | ✓ |
 | VM / LXC config snapshots (JSON snapshot + diff + restore) | — | — | ✓ |
 | Auto-snapshots on schedule (Proxmox-native + config, GFS retention) | — | — | ✓ |
-| Stacks (declarative VM infrastructure via OpenTofu — plan / deploy / destroy / drift) | — | — | ✓ |
+| Stacks (declarative VM/LXC infrastructure via OpenTofu — plan / deploy / destroy / drift) | — | — | ✓ |
+| Stacks extras (multi-disk, cloud-init login, LXC containers, stack-private bridge & SDN networks, declarative firewall) | — | — | ✓ |
+| Cluster topology view (interactive React Flow graph) | — | — | ✓ |
+| VM dependencies & action-impact warnings | — | — | ✓ |
+| Packer visual editor (form-driven build definitions) | — | — | ✓ |
+| Ansible visual editor (schema-driven task builder) | — | — | ✓ |
 
-Upload your licence key in **System Settings → Licence** or through the Setup Wizard. Plus-Verkauf is currently inactive — see [COMMERCIAL.md](COMMERCIAL.md).
+The Plus image without a key can be unlocked once for a **30-day trial** (System Settings → Licence or the Setup Wizard); afterwards it falls back to Core. Upload a licence key in **System Settings → Licence** or through the Setup Wizard for a permanent unlock. Plus sales are currently inactive — see [COMMERCIAL.md](COMMERCIAL.md).
 
 ---
 
