@@ -122,6 +122,40 @@ podman-compose -f podman-compose.host-mode.yml up -d
 
 The portal starts on **https://\<host\>:8443**. A self-signed TLS certificate is generated automatically on first start — accept the browser warning or replace the certificate (see below).
 
+#### Automated rootless Podman install (optional)
+
+On a fresh Debian/Ubuntu host you can skip the manual steps above with the
+bundled installer. It installs Podman, creates a dedicated non-root user,
+writes a self-contained compose stack (Valkey + portal + celery worker) and
+enables it as a lingering `systemd --user` service:
+
+```bash
+sudo ./p3portal-podman-install.sh
+```
+
+It prompts for the app name, image edition (Core/Plus), `SECRET_KEY`, and the
+HTTPS + Packer-HTTP ports. Everything is written under
+`/home/<app-user>/podman/<app-name>/`.
+
+Or run it straight from the repository. The installer needs root and is
+interactive, so use process substitution — a plain `curl … | bash` pipe would
+feed the script to bash's stdin and break the prompts:
+
+```bash
+sudo bash <(curl -sSL https://raw.githubusercontent.com/P3Portal-org/p3portal/main/p3portal-podman-install.sh)
+```
+
+Prefer to grab it first? Download, then run (the file is on disk, so you can
+inspect it beforehand):
+
+```bash
+wget https://raw.githubusercontent.com/P3Portal-org/p3portal/main/p3portal-podman-install.sh
+sudo bash p3portal-podman-install.sh
+```
+
+Swap `main` for a released tag (e.g. `v1.98.2-beta`) in the URL for a
+reproducible install.
+
 ### 5 — Setup wizard
 
 Open `https://<host>:8443` in your browser. The built-in wizard guides you through:

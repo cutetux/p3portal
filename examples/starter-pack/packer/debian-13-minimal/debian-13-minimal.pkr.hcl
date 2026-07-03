@@ -63,6 +63,31 @@ variable "bridge" {
   default = "vmbr0"
 }
 
+# --- Optional static network for the build VM ---------------------------------
+# Leave ip_address EMPTY (default) → the installer uses DHCP autoconfig, exactly
+# like before. Set ip_address (CIDR-less, e.g. 192.168.2.50) to configure the
+# installer statically via kernel netcfg params — needed on build networks that
+# have no DHCP server. When static, also set gateway + nameserver, otherwise the
+# installer stalls / has no DNS to fetch packages.
+
+variable "ip_address" {
+  type        = string
+  description = "Static IPv4 for the build VM (empty = DHCP)."
+  default     = ""
+}
+variable "netmask" {
+  type    = string
+  default = "255.255.255.0"
+}
+variable "gateway" {
+  type    = string
+  default = ""
+}
+variable "nameserver" {
+  type    = string
+  default = ""
+}
+
 # Portal-host IP reachable from the build VM (injected via PKR_VAR_packer_http_ip).
 variable "packer_http_ip" {
   type    = string
@@ -70,6 +95,23 @@ variable "packer_http_ip" {
 }
 
 # -----------------------------------------------------------------------------
+
+locals {
+  # When ip_address is set, preseed the netcfg stage on the kernel cmdline so the
+  # installer skips DHCP and configures a static IP *before* it fetches the
+  # preseed over HTTP. Empty ip_address → this stays "" and DHCP is used.
+  # hostname/domain match preseed.cfg so static mode doesn't prompt for them.
+  net_boot = var.ip_address != "" ? join(" ", [
+    "netcfg/disable_autoconfig=true",
+    "netcfg/get_ipaddress=${var.ip_address}",
+    "netcfg/get_netmask=${var.netmask}",
+    "netcfg/get_gateway=${var.gateway}",
+    "netcfg/get_nameservers=${var.nameserver}",
+    "netcfg/get_hostname=debian-tmpl",
+    "netcfg/get_domain=localdomain",
+    "netcfg/confirm_static=true ",
+  ]) : ""
+}
 
 source "proxmox-iso" "debian" {
   proxmox_url              = var.proxmox_api_url
@@ -115,6 +157,7 @@ source "proxmox-iso" "debian" {
   boot_command = [
     "<esc><wait>",
     "auto <wait>",
+    "${local.net_boot}",
     "preseed/url=http://${var.packer_http_ip}:{{ .HTTPPort }}/preseed.cfg ",
     "<enter>"
   ]

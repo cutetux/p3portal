@@ -131,3 +131,69 @@ def _cleanup_plus_behavior_singleton():
                 pass
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _isolate_global_app_state():
+    """CI (S726): neutralisiert geteilten globalen App-Zustand nach JEDEM Test.
+
+    Die CI („Backend Tests", sqlite+postgres, ``pytest -x``) war dauerhaft rot durch
+    **ordnungsabhängige Test-Verschmutzung**: ein Test hinterließ globalen Zustand,
+    ein Folgetest sah ihn als „kaputt". Welcher Test kippte, hing an der
+    Collection-Reihenfolge (CI: ``test_scope_wiring``; lokal-Core: cluster/admin-Login).
+
+    Zwei Leck-Vektoren, beide hier an EINER Stelle geschlossen (statt N schludrige
+    Tests einzeln zu fixen):
+
+    1. ``backend.main.app.dependency_overrides`` – viele Router-Tests setzen
+       ``app.dependency_overrides[get_current_user] = …``. Wirft der Testkörper vor
+       dem ``clear()``, leckt das Override → Folgetests laufen mit gefälschtem User.
+    2. ``_SCOPED_ENDPOINTS`` (Modul-Global in ``features/api_surface/default_deny.py``)
+       – ``build_scoped_endpoint_inventory(app)`` macht ``.clear()`` + neu; ein Test,
+       der es mit einer Mini-App aufruft, überschreibt die globale Registry für alle
+       folgenden Türsteher-Tests.
+
+    Nur aktiv, wenn ``backend.main`` bereits importiert wurde (kein Force-Import,
+    damit reine Service-/Unit-Tests nicht unnötig die App hochziehen).
+    """
+    import sys
+    yield
+    main_mod = sys.modules.get("backend.main")
+    if main_mod is None:
+        return
+    app = getattr(main_mod, "app", None)
+    if app is None:
+        return
+    try:
+        app.dependency_overrides.clear()
+    except Exception:
+        pass
+    try:
+        from backend.features.api_surface.default_deny import build_scoped_endpoint_inventory
+        build_scoped_endpoint_inventory(app)
+    except Exception:
+        pass
+    # 3. Login-Rate-Limiter (In-Memory-Dict pro IP in routers/auth.py). Ohne Reset
+    #    summieren sich Login-Versuche über Tests → ein späterer Login-Test bekommt
+    #    429 statt 200 (order-abhängig).
+    try:
+        from backend.routers import auth as _auth
+        _auth._login_attempts.clear()
+    except Exception:
+        pass
+    # 4. Cluster-Ressourcen-Cache (PROJ-33, In-Memory TTL). Ein Test, der den Cache
+    #    mit gemockten Node-Daten füllt, lässt einen Folgetest stale Daten sehen.
+    try:
+        from backend.services.cluster_cache_service import cluster_cache
+        cluster_cache.invalidate_all()
+    except Exception:
+        pass
+    # 5. Config-Cache (In-Memory-Dict aus portal_config). Ein Test, der Node-/Token-
+    #    Config setzt, lässt Folgetests stale Werte sehen (z.B. cluster/nodes). Leeren
+    #    → nächster get_config_sync fällt sauber auf DB/settings zurück. (Trial-Flags
+    #    werden separat im License-Testmodul zurückgesetzt, s. dort.)
+    try:
+        from backend.services import config_service as _cfg
+        _cfg._cache.clear()
+    except Exception:
+        pass

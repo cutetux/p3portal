@@ -5,7 +5,7 @@ suitable for cloning by the *Clone VM (basic)* Ansible playbook.
 
 ## What it does
 
-1. Boots the Debian netinst ISO with a minimal preseed (en_US, UTC, DHCP)
+1. Boots the Debian netinst ISO with a minimal preseed (en_US, UTC; DHCP by default)
 2. Installs `qemu-guest-agent` + `cloud-init`
 3. Removes the placeholder root password
 4. Proxmox converts the VM into a template
@@ -39,6 +39,26 @@ The default `iso_file` parameter expects the file on the `local` storage. If you
   (including `Sys.AccessNetwork` for download-url; see `docs/token-usage.md`)
 - The portal container must be reachable from the build VM on TCP port 8103
   (used to serve the preseed file during install)
+- The build VM's network (`bridge` parameter) must let it reach an IP: either a
+  DHCP server on that subnet (default), **or** fill in the static-network fields
+  below. Without either, the Debian installer stops at *"Network
+  autoconfiguration failed"* because it cannot fetch the preseed.
+
+### Static network (no DHCP)
+
+Leave **Static IP** empty to use DHCP (the default). If the build network has no
+DHCP server, set:
+
+| Field | Example | Notes |
+|---|---|---|
+| Static IP | `192.168.2.50` | A free IPv4 on the build subnet. Empty = DHCP |
+| Netmask | `255.255.255.0` | |
+| Gateway | `192.168.2.1` | Required when static — needed to reach the Debian mirror |
+| DNS server | `192.168.2.1` | Required when static — no DNS = package install fails |
+
+These are passed to the installer as kernel `netcfg/*` params, so it configures
+the IP *before* fetching the preseed. This is build-time only; the resulting
+template still uses cloud-init/DHCP per clone.
 
 ### 4. Pick the right storage pool
 
@@ -60,7 +80,7 @@ List what's available on your node with `pvesh get /nodes/<node>/storage --outpu
 ## Limitations (by design)
 
 - en_US locale, UTC timezone (change in your own copy of `http/preseed.cfg`)
-- DHCP only during build
+- DHCP by default; optional static IP for build networks without DHCP (see above)
 - Single 10 GB disk
 - No extra users, no firewall, no custom packages
 

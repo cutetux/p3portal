@@ -27,3 +27,23 @@ parameters:
     type: string
     required: false
     default: "vmbr0"
+  - id: ip_address
+    label: "Static IP (leave empty = DHCP)"
+    type: string
+    required: false
+    default: ""
+  - id: netmask
+    label: "Netmask (static only)"
+    type: string
+    required: false
+    default: "255.255.255.0"
+  - id: gateway
+    label: "Gateway (static only)"
+    type: string
+    required: false
+    default: ""
+  - id: nameserver
+    label: "DNS server (static only)"
+    type: string
+    required: false
+    default: ""

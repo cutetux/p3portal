@@ -224,7 +224,13 @@ async def test_build_start_missing_credentials(client: AsyncClient, packer_dir):
 
 
 @pytest.mark.asyncio
-async def test_build_start_missing_required_param(client: AsyncClient, packer_dir):
+async def test_build_start_missing_required_param(client: AsyncClient, packer_dir, monkeypatch):
+    # Ein Default-Node muss auflösbar sein, damit der Packer-Token-Check durchläuft
+    # und der Endpoint die meta.yaml-Param-Validierung erreicht (der Pfad, den dieser
+    # Test prüft). Ohne 'node' UND ohne Default-Node kürzt die Token-Auflösung sonst
+    # mit einer Credentials-422 ab, bevor die Param-Prüfung „node fehlt" greift.
+    from backend.core.config import settings
+    monkeypatch.setattr(settings, "proxmox_node", "pve1")
     resp = await client.post(
         "/api/packer/test-template/build",
         json={"params": {"vm_id": 200}},  # missing 'node'

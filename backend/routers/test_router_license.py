@@ -105,12 +105,38 @@ def _make_license_files(
     return lic_path, enc_path
 
 
+def _reset_trial_flags():
+    """Entfernt geleakte Trial-Zeilen aus der (über die Engine-Singleton) geteilten
+    Test-DB. get_trial_flags_sync liest die Flags DIREKT aus portal_config, und der
+    start_trial-Test in diesem Modul schreibt trial_used=true → ohne Reset sähe ein
+    späterer License-Test fälschlich 'plus_trial' statt 'core'/'missing'."""
+    try:
+        from sqlalchemy import text as _text
+        from backend.db.database import get_sync_engine
+        from backend.services.config_service import (
+            TRIAL_USED_KEY, TRIAL_STARTED_AT_KEY, _cache,
+        )
+        eng = get_sync_engine()
+        if eng is not None:
+            with eng.begin() as conn:
+                conn.execute(
+                    _text("DELETE FROM portal_config WHERE key IN (:u, :s)"),
+                    {"u": TRIAL_USED_KEY, "s": TRIAL_STARTED_AT_KEY},
+                )
+        _cache.pop(TRIAL_USED_KEY, None)
+        _cache.pop(TRIAL_STARTED_AT_KEY, None)
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Reset the module-level license cache before every test."""
+    """Reset the module-level license cache + trial flags before/after every test."""
+    _reset_trial_flags()
     reset_license_cache()
     yield
     reset_license_cache()
+    _reset_trial_flags()
 
 
 @pytest.fixture(autouse=True)

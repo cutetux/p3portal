@@ -75,8 +75,21 @@ def reset_cluster_cache():
     cluster_cache.invalidate_all()
 
 
+@pytest.fixture(autouse=True)
+def _patch_data_dir(tmp_path, monkeypatch):
+    """Eigenes tmp-data_dir (wie license/packer), damit init_db() in der client-Fixture
+    nicht am read-only Default /app/data scheitert und die Tests self-contained sind."""
+    from backend.core.config import settings
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path))
+
+
 @pytest_asyncio.fixture
 async def client():
+    # init_db() macht die Tests self-contained (wie license/packer): sonst hängen sie
+    # an einer global von einem anderen Test initialisierten DB-Engine → RuntimeError
+    # "DB nicht initialisiert", sobald ein anderer Test die Engine neu setzt (flaky).
+    from backend.db.database import init_db
+    await init_db()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
