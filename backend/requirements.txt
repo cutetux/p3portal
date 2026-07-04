@@ -1,4 +1,9 @@
-fastapi>=0.115.0
+# PINNED (S726): fastapi 0.139.0 kapselt include_router-Routen als _IncludedRouter
+# (nicht mehr flache APIRoute auf App-Ebene). Das bricht die Routen-Introspektion in
+# build_scoped_endpoint_inventory (Default-Deny-Türsteher → 0 scope-tragende Routen,
+# Runtime-Bug) UND test_scope_wiring. 0.136.1 ist verifiziert gut. Vor Anheben: Code
+# an _IncludedRouter anpassen (rekursiv).
+fastapi==0.136.1
 uvicorn[standard]>=0.32.0
 python-jose[cryptography]>=3.3.0
 cryptography>=42.0.0
