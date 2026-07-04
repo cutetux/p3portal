@@ -63,7 +63,7 @@ export default function ProxmoxTemplateSelector({ param, value, onChange, error,
             <option value="">– Template auswählen –</option>
             {visible.map(t => (
               <option key={t.vmid} value={t.vmid}>
-                {t.name} (ID {t.vmid})
+                {t.name} (ID {t.vmid}{t.node ? ` · ${t.node}` : ''})
               </option>
             ))}
           </select>

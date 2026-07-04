@@ -1937,6 +1937,7 @@ export default {
       use_list: 'Aus Liste wählen',
       add_tag: 'Tag „{{tag}}" hinzufügen',
       count_hint: 'Erzeugt mehrere identische VMs (Suffix -1, -2, …)',
+      template_not_on_node: 'Diese Vorlage liegt nicht auf Node „{{node}}“. Beim Deploy schlägt der Klon fehl – wähle eine Vorlage dieser Node oder ändere die Node.',
       vmid_auto: 'Auto',
       vmid_hint: 'Leer = Proxmox vergibt automatisch. Bei Anzahl > 1: Start-ID + 1, + 2, …',
       agent_hint: 'An (Standard) = IP-Anzeige + sauberes Herunterfahren; braucht qemu-guest-agent im Gast. Aus für Templates ohne Agent (schnellerer Deploy)',

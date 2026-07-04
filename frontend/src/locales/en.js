@@ -1933,6 +1933,7 @@ export default {
       use_list: 'Choose from list',
       add_tag: 'Add tag "{{tag}}"',
       count_hint: 'Creates multiple identical VMs (suffix -1, -2, …)',
+      template_not_on_node: 'This template is not on node "{{node}}". The clone will fail on deploy — pick a template on this node or change the node.',
       vmid_auto: 'Auto',
       vmid_hint: 'Empty = Proxmox auto-assigns. With count > 1: start ID + 1, + 2, …',
       agent_hint: 'On (default) = IP shown + agent-based graceful shutdown; needs qemu-guest-agent in the guest. Off for templates without the agent (faster deploy)',

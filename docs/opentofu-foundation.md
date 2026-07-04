@@ -71,6 +71,20 @@ Open Point 4):
 
 The provider block in the `.tf` therefore carries **no inline credentials**.
 
+### Error: `node_not_stack_deploy_capable:<node>`
+
+Deploying a stack fails with **HTTP 400** and `node_not_stack_deploy_capable:<node-name>` when
+the target Proxmox installation — the portal node that the stack's resources resolve to — has
+**no OpenTofu token configured** (`tofu_token_id` / `tofu_token_secret` are empty). Stacks are
+applied through OpenTofu, which uses the dedicated `PortalTofu` token; the viewer / operator /
+admin / packer tokens are **not** used for stack deploys.
+
+**Fix:** open **System Settings → Nodes → \<your node\> → Edit** and fill in the **OpenTofu
+token** (ID + secret). The node dialog shows the matching `pveum` command for the `PortalTofu`
+role (see `docs/proxmox-setup.md` Part D). On a **cluster**, this is configured **once** on the
+single portal node that represents the installation — it then applies to every cluster member,
+regardless of which member a stack's resources target.
+
 ## State on volume + native encryption
 
 - **Backend:** local, one state file per stack at

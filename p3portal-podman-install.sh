@@ -177,6 +177,10 @@ services:
     command: celery -A backend.celery_app worker --beat -l info
     env_file:
       - .env
+    volumes:
+      - ./ansible:/app/ansible
+      - ./packer:/app/packer
+      - ./data:/app/data
     environment:
       - VALKEY_URL=redis://valkey:6379/0
     security_opt:
@@ -195,6 +199,10 @@ services:
       - "${HTTP_PORT}:8103"
     env_file:
       - .env
+    volumes:
+      - ./ansible:/app/ansible
+      - ./packer:/app/packer
+      - ./data:/app/data
     environment:
       - VALKEY_URL=redis://valkey:6379/0
     security_opt:
