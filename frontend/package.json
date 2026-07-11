@@ -18,7 +18,7 @@
     "@dagrejs/dagre": "^3.0.0",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-query-devtools": "^5.100.9",
-    "axios": "^1.7.7",
+    "axios": "^1.16.0",
     "codemirror": "^6.0.2",
     "deep-diff": "^1.0.2",
     "i18next": "^26.0.8",
