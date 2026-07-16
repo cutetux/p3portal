@@ -71,6 +71,11 @@ local_users = Table(
     Column("api_keys_enabled", Integer, nullable=False, server_default="0"),    # PROJ-24
     Column("api_keys_allowed_scopes", Text),                                    # PROJ-24
     Column("api_keys_max_count", Integer),                                      # PROJ-24
+    # PROJ-106: Zwei-Faktor-Authentifizierung (TOTP)
+    Column("totp_secret", Text),                                                # Fernet-verschlüsselt, aktiv
+    Column("totp_pending_secret", Text),                                        # Fernet-verschlüsselt, unbestätigt (Enrollment)
+    Column("totp_enabled", Integer, nullable=False, server_default="0"),
+    Column("totp_recovery_codes", Text),                                        # JSON-Array SHA-256-Hashes
     CheckConstraint(
         "role IN ('admin', 'operator', 'viewer', 'restricted')",
         name="ck_local_users_role",
@@ -758,6 +763,38 @@ node_updates = Table(
 )
 Index("idx_node_updates_portal_node_id", node_updates.c.portal_node_id)
 Index("idx_node_updates_last_success_at", node_updates.c.last_success_at)
+
+# ── ip_pools (PROJ-42 Phase 1 – Core Simple-IPAM: IP-Pool je (Sub-)Netz) ──────
+#
+# Ein Pool bindet über den Identitäts-Schlüssel (kind, network_name, node,
+# vlan_tag) + cidr an genau ein Subnetz. Auf einer Bridge dürfen mehrere Pools
+# liegen (mehrere Subnetze/VLANs). NULL-Semantik wird über Sentinels normalisiert,
+# damit der Unique-Constraint portabel über SQLite + Postgres greift (NULLs sind
+# dort sonst distinkt): node='' = cluster-weites VNet, vlan_tag=0 = untagged/nativ.
+# Der Core hält NUR Pools (zustandslos); Allocations kommen in Phase 2 (Plus).
+
+ip_pools = Table(
+    "ip_pools", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", String(10), nullable=False),                 # "bridge" | "vnet"
+    Column("network_name", String(100), nullable=False),        # z. B. vmbr0 / guests
+    Column("node", String(100), nullable=False, server_default=""),   # '' = cluster-weit (vnet)
+    Column("vlan_tag", Integer, nullable=False, server_default="0"),   # 0 = untagged/nativ
+    Column("cidr", String(64), nullable=False),                 # z. B. 192.168.2.0/24
+    Column("gateway", String(64), nullable=True),
+    Column("dns", Text, nullable=True),                         # JSON-Liste (optional)
+    Column("range_start", String(64), nullable=True),
+    Column("range_end", String(64), nullable=True),
+    Column("description", Text, nullable=True),
+    Column("created_by", String(150), nullable=True),
+    Column("created_at", String, nullable=True),
+    Column("updated_at", String, nullable=True),
+    UniqueConstraint(
+        "kind", "network_name", "node", "vlan_tag", "cidr",
+        name="uq_ip_pools_network_subnet",
+    ),
+)
+Index("idx_ip_pools_network", ip_pools.c.kind, ip_pools.c.network_name, ip_pools.c.node)
 
 # ── ansible_managed_hosts (PROJ-83 – minimaler persistierter In-Guest-Host-Zustand) ──
 #

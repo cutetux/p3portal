@@ -8,7 +8,7 @@ import ModalHelpButton from '../../features/help/components/ModalHelpButton'
 
 const VIEWER_PRIVS   = 'VM.Audit,VM.GuestAgent.Audit,Pool.Audit,Sys.Audit'
 const OPERATOR_PRIVS = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,Pool.Audit'
-const ADMIN_PRIVS    = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Backup,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.Allocate,Datastore.AllocateSpace,Datastore.AllocateTemplate,Datastore.Audit,SDN.Use,SDN.Allocate,Pool.Audit,Sys.Audit,Sys.Modify,Sys.AccessNetwork'
+const ADMIN_PRIVS    = 'VM.Audit,VM.GuestAgent.Audit,VM.PowerMgmt,VM.Snapshot,VM.Allocate,VM.Clone,VM.Migrate,VM.Backup,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.HWType,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,Datastore.Allocate,Datastore.AllocateSpace,Datastore.AllocateTemplate,Datastore.Audit,SDN.Use,SDN.Allocate,Pool.Audit,Sys.Audit,Sys.Modify,Sys.AccessNetwork'
 const PACKER_PRIVS   = 'VM.Allocate,VM.Clone,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.HWType,VM.Config.Network,VM.Config.Options,VM.Config.Cloudinit,VM.Config.CDROM,VM.Console,VM.PowerMgmt,VM.Audit,VM.GuestAgent.Audit,Datastore.Allocate,Datastore.AllocateSpace,Datastore.AllocateTemplate,Datastore.Audit,SDN.Use,Sys.AccessNetwork'
 // PROJ-76 Phase 2a: PortalTofu role – least-privilege OpenTofu engine token.
 // Sys.Modify (PROJ-87) lets a stack create its own node-level bridge

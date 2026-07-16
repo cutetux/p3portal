@@ -188,6 +188,7 @@ export default function PlaybookForm({ playbook }) {
           onChange={handleChange}
           error={errors[param.id]}
           formValues={values}
+          params={playbook.parameters ?? []}
         />
       ))}
 

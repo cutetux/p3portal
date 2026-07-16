@@ -119,6 +119,11 @@ async def _migrate_db(conn) -> None:
         ("local_users", "api_keys_enabled INTEGER NOT NULL DEFAULT 0"),
         ("local_users", "api_keys_allowed_scopes TEXT"),
         ("local_users", "api_keys_max_count INTEGER"),
+        # PROJ-106 – Zwei-Faktor-Authentifizierung (TOTP)
+        ("local_users", "totp_secret TEXT"),
+        ("local_users", "totp_pending_secret TEXT"),
+        ("local_users", "totp_enabled INTEGER NOT NULL DEFAULT 0"),
+        ("local_users", "totp_recovery_codes TEXT"),
         # PROJ-18
         ("user_profiles", "theme_preference TEXT"),
         ("user_profiles", "lang_preference TEXT"),

@@ -32,6 +32,50 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class LoginResponse(BaseModel):
+    """PROJ-106: Login-Ausgang – entweder Voll-Token ODER 2FA-Challenge nötig.
+
+    Normalfall: ``access_token`` gesetzt, ``two_factor_required`` False
+    (rückwärtskompatibel zu TokenResponse-Clients).
+    2FA aktiv: ``access_token`` None, ``two_factor_required`` True + ``pre_auth_token``.
+    """
+    access_token: str | None = None
+    token_type: str = "bearer"
+    two_factor_required: bool = False
+    pre_auth_token: str | None = None
+
+
+class TwoFactorLoginRequest(BaseModel):
+    pre_auth_token: str
+    code: str
+
+    @field_validator("pre_auth_token", "code")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must not be empty")
+        return v
+
+
+class TwoFactorPolicyRequest(BaseModel):
+    enforce_global: bool = False
+    enforce_roles: list[str] = []
+
+    @field_validator("enforce_roles")
+    @classmethod
+    def valid_roles(cls, v: list[str]) -> list[str]:
+        allowed = {"admin", "operator", "viewer", "restricted"}
+        invalid = set(v) - allowed
+        if invalid:
+            raise ValueError(f"Unknown roles: {invalid}. Allowed: {allowed}")
+        return list(dict.fromkeys(v))
+
+
+class TwoFactorPolicyResponse(BaseModel):
+    enforce_global: bool
+    enforce_roles: list[str] = []
+
+
 class PermissionsResponse(BaseModel):
     username: str
     capabilities: dict
@@ -103,6 +147,7 @@ class UserResponse(BaseModel):
     portal_permissions: list[str] = []
     group_names: list[str] = []
     preset_names: list[str] = []
+    totp_enabled: bool = False  # PROJ-106: 2FA-Status für Admin-Sicht
 
 
 class PortalPermissionsRequest(BaseModel):
@@ -113,7 +158,7 @@ class PortalPermissionsRequest(BaseModel):
     def valid_permissions(cls, v: list[str]) -> list[str]:
         from backend.core.plus_protocol import plus_behavior
         # PROJ-64: approve_jobs ist Plus-only → kommt via get_extra_portal_permissions()
-        core_perms = {"view_logs", "manage_users", "manage_nodes", "manage_settings", "manage_api_keys", "manage_announcements", "manage_groups", "manage_help", "manage_backup_jobs", "manage_networks", "manage_sdn", "manage_firewall"}
+        core_perms = {"view_logs", "manage_users", "manage_nodes", "manage_settings", "manage_api_keys", "manage_announcements", "manage_groups", "manage_help", "manage_backup_jobs", "manage_networks", "manage_sdn", "manage_firewall", "manage_ha"}
         try:
             extra = set(plus_behavior.get_extra_portal_permissions())
         except Exception:

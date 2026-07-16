@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { startVm, stopVm, rebootVm } from '../../api/vms'
 import ConfirmModal from '../common/ConfirmModal'
 import { useDependencyImpactGuard } from './useDependencyImpactGuard'
+import { useHaAwarenessGuard } from './useHaAwarenessGuard'
 
 const ACTIONS = {
   start:  { label: 'Starten',    needsConfirm: false, danger: false },
@@ -37,7 +38,7 @@ function errMsg(err) {
   return d ?? 'Fehler beim Ausführen der Aktion.'
 }
 
-function SingleAction({ action, vmid, node, vmStatus, onSuccess, onError, onConfirmRequested, guardedRun, compact }) {
+function SingleAction({ action, vmid, node, vmStatus, onSuccess, onError, onConfirmRequested, guardedRun, haGuardedRun, compact }) {
   const [busy, setBusy] = useState(false)
   const cfg = ACTIONS[action]
 
@@ -51,8 +52,14 @@ function SingleAction({ action, vmid, node, vmStatus, onSuccess, onError, onConf
     try {
       // PROJ-96: stop/reboot durchlaufen die Abhängigkeits-Impact-Warnung
       // (409 → Dialog → Retry mit confirm); start ist ungeguardet.
+      // PROJ-103: stop durchläuft zusätzlich die HA-Awareness-Warnung. Beide Guards
+      // teilen sich das confirm-Flag (Backend prüft Dependency vor HA; ein confirm=true
+      // überspringt beide) → HA-Guard innen verschachtelt.
       if (action === 'start')  await startVm(vmid, node)
-      if (action === 'stop')   await guardedRun((confirm) => stopVm(vmid, node, { confirm }), cfg.label)
+      if (action === 'stop')   await guardedRun(
+        (confirm) => haGuardedRun((haConfirm) => stopVm(vmid, node, { confirm: confirm || haConfirm }), cfg.label),
+        cfg.label,
+      )
       if (action === 'reboot') await guardedRun((confirm) => rebootVm(vmid, node, { confirm }), cfg.label)
       onSuccess?.(`VM ${vmid}: ${cfg.label} wurde gestartet.`)
     } catch (err) {
@@ -104,6 +111,7 @@ function SingleAction({ action, vmid, node, vmStatus, onSuccess, onError, onConf
 export default function VmActionButtons({ vm, onSuccess, onError, compact = false }) {
   const [pendingConfirm, setPendingConfirm] = useState(null)
   const { guardedRun, impactModal } = useDependencyImpactGuard()
+  const { guardedRun: haGuardedRun, haModal } = useHaAwarenessGuard()  // PROJ-103
   const perms = vm.permissions
 
   const visible = perms == null
@@ -127,10 +135,12 @@ export default function VmActionButtons({ vm, onSuccess, onError, compact = fals
           onError={onError}
           onConfirmRequested={(a, execute) => setPendingConfirm({ action: a, execute })}
           guardedRun={guardedRun}
+          haGuardedRun={haGuardedRun}
           compact={compact}
         />
       ))}
       {impactModal}
+      {haModal}
       {pendingConfirm && (
         <ConfirmModal
           title={`VM ${vm.vmid} ${cfg.label.toLowerCase()}?`}

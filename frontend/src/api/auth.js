@@ -1,5 +1,6 @@
 // p3portal.org
 import api from './client'
+import { clearToken } from './tokenStorage'
 
 export async function login(username, password, realm) {
   const { data } = await api.post('/api/auth/login', { username, password, realm })
@@ -11,9 +12,15 @@ export async function loginLocal(username, password) {
   return data
 }
 
+// PROJ-106: Zweiter Login-Schritt – löst das Pre-Auth-Token gegen TOTP-/Recovery-Code ein.
+export async function loginTwoFactor(preAuthToken, code) {
+  const { data } = await api.post('/api/auth/login/2fa', { pre_auth_token: preAuthToken, code })
+  return data
+}
+
 export async function logout() {
   await api.post('/api/auth/logout').catch(() => {})
-  sessionStorage.removeItem('token')
+  clearToken()
 }
 
 export async function getPermissions() {

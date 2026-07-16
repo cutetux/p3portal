@@ -22,6 +22,7 @@ import GlobalRulesTab from '../../components/admin/monitoring/GlobalRulesTab'
 import { PlusComponents } from '../../plus'
 import UserTable from '../../components/admin/UserTable'
 import UserForm from '../../components/admin/UserForm'
+import TwoFactorPolicySection from '../../components/admin/TwoFactorPolicySection'
 import NodeTable from '../../components/admin/NodeTable'
 import NodeFormModal from '../../components/admin/NodeFormModal'
 import PackerUploadModal from '../../components/packer/PackerUploadModal'
@@ -278,6 +279,10 @@ function UsersTab() {
                 onRefresh={load}
               />
           }
+          {/* PROJ-106: 2FA-Enforce-Richtlinie */}
+          <div className="mt-6">
+            <TwoFactorPolicySection />
+          </div>
         </>
       )}
 

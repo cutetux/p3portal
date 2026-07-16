@@ -2,19 +2,28 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
+from datetime import datetime, timezone
 from typing import NoReturn
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from sqlalchemy import text
 from backend.features.api_surface.deps import require_scope_for_upk  # PROJ-97
 
 from backend.core.deps import CurrentUser, get_current_user, require_admin
+from backend.db.database import get_db
+from backend.models.jobs import JobResponse
 from backend.models.vms import (
+    CloneRequest,
     DiskAttachRequest,
     DiskListResponse,
     DiskResizeRequest,
     ImageStorageInfo,
+    MigrateRequest,
+    MigrationTargetsResponse,
+    RootdirStorageInfo,
     ServiceAccountStatusResponse,
     SnapshotCreateRequest,
     SnapshotInfo,
@@ -110,6 +119,109 @@ async def _dependency_impact(
             "action": action,
             "count": len(dependents),
             "dependents": dependents,
+        },
+    )
+
+
+async def _ipam_release_impact(
+    pve_node: str, vmid: int, confirm: bool,
+    username: str, auth_type: str,
+) -> None:
+    """PROJ-42 Phase 2: warn-then-confirm guard when deleting a VM holding an IPAM
+    allocation.
+
+    Structurally analog to ``_dependency_impact`` (Plus-hook lookup + resumable
+    409): if the VM holds a confirmed/orphaned IP allocation and ``confirm`` is
+    False, raise 409 ``ipam_allocation_impact`` listing the IPs that would be
+    released. A retry with ``?confirm=true`` skips the guard; the release itself
+    happens via ``on_vm_lxc_deleted_ipam`` after the delete. Core-mode is a no-op
+    (Plus-Hook → []). Not permission-gated (any user allowed to delete gets it).
+    """
+    if confirm:
+        return
+    from backend.core.plus_protocol import plus_behavior
+    from backend.services.nodes_service import get_node_for_proxmox_name
+
+    node_row = await get_node_for_proxmox_name(pve_node)
+    if node_row is None:
+        return
+    try:
+        allocations = await plus_behavior.ipam_release_impact(node_row.id, vmid)
+    except Exception:
+        allocations = []
+    if not allocations:
+        return
+    await write_audit_log(
+        event_type="ipam_release_impact_warned",
+        username=username,
+        auth_type=auth_type,
+        detail=f"vmid={vmid} node={pve_node} allocations={len(allocations)}",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "error": "ipam_allocation_impact",
+            "count": len(allocations),
+            "allocations": allocations,
+        },
+    )
+
+
+async def _assert_ha_confirmed(
+    client: ProxmoxClient, auth: ProxmoxAuth, vmid: int, confirm: bool,
+    action: str, username: str, auth_type: str,
+) -> None:
+    """PROJ-103: warn-then-confirm guard for actions on an HA-managed VM/CT.
+
+    Structurally analog to ``_dependency_impact`` (a lookup + resumable 409), but
+    the source is the live Proxmox HA config, not a Plus hook. If the VM/CT is an
+    HA resource with desired state ``started`` and ``confirm`` is False, raise
+    409 ``ha_managed`` with an explanatory payload (the HA manager would fight the
+    action / bring the guest back up). A retry with ``?confirm=true`` skips the
+    guard. Warnen, nicht blockieren (Leitentscheidung #6) — P3 blockt nie hart.
+
+    **Strictly best-effort:** any read error / standalone-without-HA (404/403) →
+    silently proceed (never break the underlying action, "es darf nicht kaputt
+    gehen"). Only fires for HA resources with state ``started``; non-HA / stopped /
+    disabled guests are unaffected (AC-AWARE-3). Matches by trailing ``:<vmid>``
+    (a VMID is cluster-unique) so it is robust to the vm:/ct: prefix convention.
+    """
+    if confirm:
+        return
+    try:
+        resources = await client.get_ha_resources(auth)
+    except Exception:
+        return  # HA unreadable / standalone / missing privileges → proceed
+    matched_sid: str | None = None
+    matched_state: str | None = None
+    matched_group = None
+    for r in resources:
+        if not isinstance(r, dict):
+            continue
+        sid = str(r.get("sid") or r.get("id") or "")
+        if sid.startswith("service:"):
+            sid = sid[len("service:"):]
+        if sid.endswith(f":{vmid}"):
+            matched_sid = sid
+            matched_state = str(r.get("state") or "")
+            matched_group = r.get("group")
+            break
+    if matched_sid is None or matched_state != "started":
+        return
+    await write_audit_log(
+        event_type="vm_ha_managed_warned",
+        username=username,
+        auth_type=auth_type,
+        detail=f"vmid={vmid} sid={matched_sid} action={action} state={matched_state}",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "error": "ha_managed",
+            "action": action,
+            "sid": matched_sid,
+            "state": matched_state,
+            "group": matched_group,
         },
     )
 
@@ -352,6 +464,9 @@ async def vm_stop(
         await _dependency_impact(
             pve_node, vmid, confirm, "stop", current_user.username, current_user.auth_type
         )
+        await _assert_ha_confirmed(
+            client, auth, vmid, confirm, "stop", current_user.username, current_user.auth_type
+        )
         task_id = await client.vm_power_action(auth, pve_node, vmid, "shutdown", vm_type)
         return VmTaskResponse(task_id=task_id)
     except httpx.HTTPStatusError as exc:
@@ -559,6 +674,8 @@ async def list_image_storages(
             avail=int(s.get("avail", 0) or 0),
             total=int(s.get("total", 0) or 0),
             used=int(s.get("used", 0) or 0),
+            shared=bool(int(s.get("shared", 0) or 0)),   # PROJ-101
+            content=str(s.get("content", "")),           # PROJ-101
         )
         for s in raw
         if s.get("storage")
@@ -810,6 +927,10 @@ async def delete_vm(
         await _dependency_impact(
             pve_node, vmid, confirm, "delete", current_user.username, current_user.auth_type
         )
+        # PROJ-42 Phase 2: warn (resumable) when this VM holds an IPAM allocation.
+        await _ipam_release_impact(
+            pve_node, vmid, confirm, current_user.username, current_user.auth_type
+        )
         task_id = await client.delete_vm(auth, pve_node, vmid, vm_type)
         # PROJ-64: Pending Approvals für diese VM/LXC canceln (Plus-Protocol-Hook)
         try:
@@ -841,9 +962,281 @@ async def delete_vm(
                     )
                 except Exception:
                     pass
+                # PROJ-42 Phase 2: IPAM-Allocation der gelöschten VM freigeben
+                try:
+                    await _pb.on_vm_lxc_deleted_ipam(
+                        _node_row.id, vmid, current_user.username,
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass
         return VmTaskResponse(task_id=task_id)
+    except httpx.HTTPStatusError as exc:
+        _handle_proxmox_error(exc)
+    except httpx.RequestError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Proxmox API")
+
+
+# ── VM/LXC Lifecycle: Clone / Migrate / Convert-to-Template (PROJ-102) ────────
+
+async def _create_lifecycle_job(
+    action: str,
+    current_user: CurrentUser,
+    vmid: int,
+    label_ref: str,
+    dispatch_kwargs: dict,
+) -> JobResponse:
+    """Persist a lifecycle job (own type string) and dispatch the async worker.
+
+    Mirrors the stacks job-insert pattern (``type='vm_<action>'``, synthetic
+    ``playbook`` label). The worker runs in-process via ``asyncio.create_task``
+    and drives the Proxmox op + live-log + status update.
+    """
+    from backend.services.vm_lifecycle_service import run_vm_lifecycle_job
+
+    job_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    job_type = f"vm_{action}"
+    playbook_label = f"{action}:{label_ref}"
+    params = {k: v for k, v in dispatch_kwargs.items() if k in (
+        "vmid", "vm_type", "newid", "name", "target_storage", "full",
+        "set_owner", "target_node", "pve_node",
+    )}
+    async with get_db() as session:
+        await session.execute(
+            text(
+                "INSERT INTO jobs (id, type, playbook, status, created_at, username, params) "
+                "VALUES (:id, :jtype, :pb, 'pending', :now, :user, :params)"
+            ),
+            {
+                "id": job_id, "jtype": job_type, "pb": playbook_label,
+                "now": now, "user": current_user.username, "params": json.dumps(params),
+            },
+        )
+        await session.commit()
+
+    asyncio.create_task(run_vm_lifecycle_job(job_id, action, **dispatch_kwargs))
+    return JobResponse(
+        id=job_id, type=job_type, playbook=playbook_label, status="pending",
+        created_at=now, username=current_user.username, params=params,
+    )
+
+
+@router.get("/vms/{vmid}/migration-targets", response_model=MigrationTargetsResponse, dependencies=[_SCOPE_READ])
+async def get_migration_targets(
+    vmid: int,
+    node: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MigrationTargetsResponse:
+    """Other cluster_nodes of this installation (without the current node).
+
+    Empty list → single-node installation → Migrate disabled (AC-MIG-1/3).
+    """
+    from backend.services.nodes_service import get_node_for_proxmox_name
+
+    _, _, pve_node, vm_type = await _resolve_vm_access(current_user, vmid, node)
+    await _check_rbac(current_user, vmid, vm_type, "migrate", pve_node)
+    node_row = await get_node_for_proxmox_name(pve_node)
+    targets: list[str] = []
+    if node_row is not None:
+        targets = [n for n in (node_row.cluster_nodes or []) if n and n != pve_node]
+    return MigrationTargetsResponse(current_node=pve_node, targets=sorted(targets))
+
+
+@router.get("/nodes/{node}/rootdir-storages", response_model=list[RootdirStorageInfo], dependencies=[_SCOPE_READ])
+async def list_rootdir_storages(
+    node: str = Path(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[RootdirStorageInfo]:
+    """List storages on *node* that can hold LXC rootfs volumes (clone target)."""
+    try:
+        client, auth = await _resolve_node_read_auth(current_user, node)
+        raw = await client.get_node_rootdir_storages(auth, node)
+    except httpx.HTTPStatusError as exc:
+        _handle_proxmox_error(exc)
+    except httpx.RequestError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Proxmox API")
+    return [
+        RootdirStorageInfo(
+            name=str(s.get("storage", "")),
+            type=str(s.get("type", "")),
+            avail=int(s.get("avail", 0) or 0),
+            total=int(s.get("total", 0) or 0),
+            used=int(s.get("used", 0) or 0),
+        )
+        for s in raw
+        if s.get("storage")
+    ]
+
+
+@router.post("/vms/{vmid}/clone", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED, dependencies=[_SCOPE_WRITE])
+async def clone_vm(
+    vmid: int,
+    body: CloneRequest,
+    node: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> JobResponse:
+    """Clone a VM/LXC onto the same node (Core). Runs as a job with live-log.
+
+    Clone is allowed on a running guest (AC-CLONE-4) and is NOT stack-blocked —
+    it only reads the source and creates an independent non-stack copy.
+    """
+    try:
+        client, auth, pve_node, vm_type = await _resolve_vm_access(current_user, vmid, node)
+        await _check_rbac(current_user, vmid, vm_type, "clone", pve_node)
+
+        # Linked-Clone nur wenn Quelle ein Template ist (Proxmox-Constraint, AC-CLONE-2).
+        if not body.full:
+            config = await client.get_vm_config(auth, pve_node, vmid, vm_type)
+            if str(config.get("template", 0)) not in ("1", "True"):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Linked-Clone ist nur von einem Template möglich",
+                )
+
+        # Ziel-VMID: vorgegeben (Konflikt-Check) oder auto next-free.
+        if body.newid is not None:
+            try:
+                free = await client.get_next_vmid(auth, body.newid, body.newid)
+            except ValueError:
+                free = None
+            if free != body.newid:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"VMID {body.newid} ist bereits belegt",
+                )
+            newid = body.newid
+        else:
+            newid = await client.get_next_vmid(auth, 100, 999999)
+
+        return await _create_lifecycle_job(
+            "clone", current_user, vmid, str(newid),
+            {
+                "client": client, "auth": auth, "pve_node": pve_node,
+                "vmid": vmid, "vm_type": vm_type,
+                "actor_username": current_user.username,
+                "actor_user_id": current_user.user_id,
+                "newid": newid, "name": body.name,
+                "target_storage": body.target_storage, "full": body.full,
+                "set_owner": body.set_owner,
+            },
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        _handle_proxmox_error(exc)
+    except httpx.RequestError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Proxmox API")
+
+
+@router.post("/vms/{vmid}/migrate", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED, dependencies=[_SCOPE_WRITE])
+async def migrate_vm(
+    vmid: int,
+    body: MigrateRequest,
+    node: str | None = Query(default=None),
+    confirm: bool = Query(default=False),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> JobResponse:
+    """Offline-migrate a VM/LXC to another node in the same cluster (Core).
+
+    Blocked for stack-managed guests (409, AC-STACK-1) and for running guests
+    (409, AC-STATE-1). HA-managed guests (Soll started) yield a resumable 409
+    ``ha_managed`` without ``confirm`` (PROJ-103 AC-AWARE-1). Runs as a job.
+    """
+    try:
+        client, auth, pve_node, vm_type = await _resolve_vm_access(current_user, vmid, node)
+        await _check_rbac(current_user, vmid, vm_type, "migrate", pve_node)
+        await _assert_not_stack_managed(pve_node, vmid, current_user.username, current_user.auth_type)
+        await _assert_ha_confirmed(
+            client, auth, vmid, confirm, "migrate", current_user.username, current_user.auth_type
+        )
+
+        # Nur bei gestopptem Gast (AC-STATE-1).
+        st = await client.get_vm_status_current(auth, pve_node, vmid, vm_type)
+        if st.get("status") != "stopped":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Migration nur bei gestopptem Gast möglich – zuerst stoppen",
+            )
+
+        # Ziel muss ein anderer cluster_node derselben Installation sein (AC-MIG-1).
+        from backend.services.nodes_service import get_node_for_proxmox_name
+        node_row = await get_node_for_proxmox_name(pve_node)
+        valid_targets = set((node_row.cluster_nodes or []) if node_row else [])
+        valid_targets.discard(pve_node)
+        if body.target_node not in valid_targets:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"'{body.target_node}' ist keine gültige Ziel-Node dieses Clusters",
+            )
+
+        return await _create_lifecycle_job(
+            "migrate", current_user, vmid, body.target_node,
+            {
+                "client": client, "auth": auth, "pve_node": pve_node,
+                "vmid": vmid, "vm_type": vm_type,
+                "actor_username": current_user.username,
+                "actor_user_id": current_user.user_id,
+                "target_node": body.target_node,
+                "target_storage": body.target_storage,
+            },
+        )
+    except HTTPException:
+        raise
+    except httpx.HTTPStatusError as exc:
+        _handle_proxmox_error(exc)
+    except httpx.RequestError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Proxmox API")
+
+
+@router.post("/vms/{vmid}/convert-template", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED, dependencies=[_SCOPE_WRITE])
+async def convert_to_template(
+    vmid: int,
+    node: str | None = Query(default=None),
+    confirm: bool = Query(default=False),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> JobResponse:
+    """Convert a stopped VM/LXC into a template (Core). Runs as a job with live-log.
+
+    Blocked for stack-managed guests (409) and for running guests (409).
+    HA-managed guests (Soll started) yield a resumable 409 ``ha_managed`` without
+    ``confirm`` (PROJ-103 AC-AWARE-1). An existing owner entry is removed by the
+    worker (a template has no owner).
+    """
+    try:
+        client, auth, pve_node, vm_type = await _resolve_vm_access(current_user, vmid, node)
+        await _check_rbac(current_user, vmid, vm_type, "template", pve_node)
+        await _assert_not_stack_managed(pve_node, vmid, current_user.username, current_user.auth_type)
+        await _assert_ha_confirmed(
+            client, auth, vmid, confirm, "template", current_user.username, current_user.auth_type
+        )
+
+        st = await client.get_vm_status_current(auth, pve_node, vmid, vm_type)
+        if st.get("status") != "stopped":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Konvertierung nur bei gestopptem Gast möglich – zuerst stoppen",
+            )
+        if str(st.get("template", 0)) in ("1", "True"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Gast ist bereits ein Template",
+            )
+
+        return await _create_lifecycle_job(
+            "template", current_user, vmid, str(vmid),
+            {
+                "client": client, "auth": auth, "pve_node": pve_node,
+                "vmid": vmid, "vm_type": vm_type,
+                "actor_username": current_user.username,
+                "actor_user_id": current_user.user_id,
+            },
+        )
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as exc:
         _handle_proxmox_error(exc)
     except httpx.RequestError:

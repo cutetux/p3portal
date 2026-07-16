@@ -1,5 +1,6 @@
 // p3portal.org
 import axios from 'axios'
+import { getToken, clearToken } from './tokenStorage'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? '',
@@ -7,7 +8,7 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem('token')
+  const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -20,8 +21,8 @@ api.interceptors.response.use(
     if (err.response?.status === 401
         && !err.config?.url?.includes('/api/auth/login')
         && window.location.pathname !== '/login'
-        && sessionStorage.getItem('token')) {
-      sessionStorage.removeItem('token')
+        && getToken()) {
+      clearToken()
       window.location.href = '/login'
     }
     return Promise.reject(err)

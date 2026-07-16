@@ -8,7 +8,14 @@ from pydantic import BaseModel, field_validator
 
 from backend.core.deps import CurrentUser, get_current_user, require_admin, require_admin_or, require_logs_access
 from backend.core.plus_protocol import plus_behavior
-from backend.models.auth import PortalPermissionsRequest, UserCreateRequest, UserResponse, UserUpdateRequest
+from backend.models.auth import (
+    PortalPermissionsRequest,
+    TwoFactorPolicyRequest,
+    TwoFactorPolicyResponse,
+    UserCreateRequest,
+    UserResponse,
+    UserUpdateRequest,
+)
 from backend.models.profile import ResetPasswordRequest
 from backend.services.audit_service import count_audit_logs, get_audit_logs, write_audit_log
 from backend.services.proxmox_audit_service import is_audit_enabled, read_audit_lines
@@ -283,6 +290,51 @@ async def reset_user_password(
         detail=f"Passwort für '{target.username}' zurückgesetzt"
     )
     return updated
+
+
+# ── PROJ-106: 2FA-Verwaltung (Admin) ──────────────────────────────────────────
+
+@router.post("/admin/users/{user_id}/2fa/reset", response_model=UserResponse)
+async def reset_user_2fa(
+    user_id: int,
+    current_user: CurrentUser = Depends(require_admin_or("manage_users")),
+) -> UserResponse:
+    """Setzt das 2FA eines Nutzers zurück (Lockout-Hilfe bei Geräteverlust)."""
+    target = await get_user_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nutzer nicht gefunden")
+    from backend.services.two_factor_service import admin_reset
+    await admin_reset(user_id)
+    await write_audit_log(
+        "2fa_reset", current_user.username, current_user.auth_type,
+        detail=f"2FA für '{target.username}' zurückgesetzt"
+    )
+    updated = await get_user_by_id(user_id)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nutzer nicht gefunden")
+    return updated
+
+
+@router.get("/admin/2fa/policy", response_model=TwoFactorPolicyResponse)
+async def get_2fa_policy(
+    _: CurrentUser = Depends(require_admin_or("manage_users")),
+) -> TwoFactorPolicyResponse:
+    from backend.services.two_factor_service import get_policy
+    return TwoFactorPolicyResponse(**await get_policy())
+
+
+@router.put("/admin/2fa/policy", response_model=TwoFactorPolicyResponse)
+async def set_2fa_policy(
+    body: TwoFactorPolicyRequest,
+    current_user: CurrentUser = Depends(require_admin_or("manage_users")),
+) -> TwoFactorPolicyResponse:
+    from backend.services.two_factor_service import get_policy, set_policy
+    await set_policy(body.enforce_global, body.enforce_roles, updated_by=current_user.username)
+    await write_audit_log(
+        "2fa_policy_changed", current_user.username, current_user.auth_type,
+        detail=f"global={body.enforce_global} roles={body.enforce_roles}"
+    )
+    return TwoFactorPolicyResponse(**await get_policy())
 
 
 # ── SSH-Key settings ──────────────────────────────────────────────────────────

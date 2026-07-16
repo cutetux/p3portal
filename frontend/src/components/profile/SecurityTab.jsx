@@ -1,6 +1,8 @@
 // p3portal.org
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { changePassword } from '../../api/profile'
+import TwoFactorSection from './TwoFactorSection'
 
 const inputCls =
   'w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 ' +
@@ -47,6 +49,7 @@ function PasswordInput({ id, value, onChange, hasError }) {
 }
 
 export default function SecurityTab({ authType, onPasswordChanged }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({ current: '', next: '', confirm: '' })
   const [errors, setErrors] = useState({})
   const [success, setSuccess] = useState(false)
@@ -95,6 +98,7 @@ export default function SecurityTab({ authType, onPasswordChanged }) {
   }
 
   return (
+    <div className="space-y-6">
     <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg p-6">
       <form onSubmit={handleSubmit} className="space-y-4 max-w-sm">
         {success && (
@@ -159,6 +163,14 @@ export default function SecurityTab({ authType, onPasswordChanged }) {
         </button>
         <span className="rq hidden" aria-hidden="true" />
       </form>
+    </div>
+
+    {/* PROJ-106: Zwei-Faktor-Authentifizierung */}
+    <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg p-6">
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100 mb-1">{t('two_factor.title')}</h3>
+      <p className="text-xs text-gray-500 dark:text-zinc-500 mb-4">{t('two_factor.subtitle')}</p>
+      <TwoFactorSection onTokenRefresh={onPasswordChanged} />
+    </div>
     </div>
   )
 }

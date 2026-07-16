@@ -78,16 +78,36 @@ License files are **not** stored in this repository (`.gitignore` rule: `*.lic`)
 | Feature | Core | Plus |
 |---|---|---|
 | Proxmox cluster dashboard | ✓ | ✓ |
-| Ansible Playbook runner | ✓ | ✓ |
+| Ansible playbook runner (+ in-guest runs) | ✓ | ✓ |
 | Packer template builder | ✓ | ✓ |
 | Job history & live logs | ✓ | ✓ |
-| Single Proxmox node | ✓ | ✓ |
+| Network management (Linux bridges & VLANs) | ✓ | ✓ |
+| SDN management (zones / VNets / subnets) | ✓ | ✓ |
+| Proxmox firewall (datacenter / node / VM, security groups, IP sets) | ✓ | ✓ |
+| VM disk management (attach / resize / remove) | ✓ | ✓ |
+| VM / LXC clone, migrate & convert-to-template | ✓ | ✓ |
+| High-availability management (HA rules / groups & resources) | ✓ | ✓ |
+| IP pools & free-IP suggestion (Simple-IPAM) | ✓ | ✓ |
+| Two-factor authentication (TOTP) | ✓ | ✓ |
+| Users / groups / role presets / ownerships | ✓ (limited) | ✓ (unlimited) |
+| Scheduled jobs | — | ✓ |
 | Multi-node / multi-cluster | — | ✓ |
-| Alert presets & SMTP alerts | — | ✓ |
-| Scheduled jobs (Celery) | — | ✓ |
 | Resource pools with quotas | — | ✓ |
-| Approval workflow | — | ✓ |
-| Theme editor (color picker) | — | ✓ |
+| Approval workflow (4-eyes) | — | ✓ |
+| Per-node permission scopes | — | ✓ |
+| Playbook permission whitelists | — | ✓ |
+| Alert presets & SMTP / webhook delivery | — | ✓ |
+| Theme editor (colour picker) | — | ✓ |
+| Git-sync for playbooks & Packer | — | ✓ |
+| VM / LXC config snapshots (diff + restore) | — | ✓ |
+| Auto-snapshots on schedule (GFS retention) | — | ✓ |
+| Stacks (declarative infrastructure via OpenTofu) | — | ✓ |
+| Stacks extras (multi-disk, cloud-init, LXC, networks, firewall) | — | ✓ |
+| Cluster topology view | — | ✓ |
+| VM dependencies & action-impact warnings | — | ✓ |
+| Packer & Ansible visual editors | — | ✓ |
+| Template replication across nodes | — | ✓ |
+| IPAM (persistent allocations, network grants, Stacks IP) | — | ✓ |
 
 ---
 

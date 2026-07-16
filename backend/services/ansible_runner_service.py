@@ -233,6 +233,15 @@ async def run_ansible_job(
             import logging
             logging.getLogger(__name__).warning("PROJ-83: ansible deploy_hook error for job %s: %s", job_id, exc)
 
+    # PROJ-42 Phase 2: IPAM-Reservierung bestätigen (success → confirmed) bzw.
+    # freigeben (failed → pending gelöscht). Plus-Protocol-Hook, Core = no-op.
+    try:
+        from backend.core.plus_protocol import plus_behavior as _pb
+        await _pb.on_job_finished_ipam(job_id, job_status == "success")
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("PROJ-42: ipam job_finished hook error for job %s: %s", job_id, exc)
+
     # PROJ-44: Fire webhook if requested (callback_url set by caller)
     if callback_url:
         from backend.services.webhook_service import dispatch_webhook

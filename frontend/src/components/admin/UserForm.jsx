@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createUser, updateUser, setPortalPermissions, resetUserPassword } from '../../api/admin'
+import { resetUser2fa } from '../../api/twoFactor'
 import { getApiKeySettings, updateApiKeySettings } from '../../api/userApiKeys'
 import { useCapability, useCapabilityList } from '../../hooks/useCapability'
 import AssignmentSection from './rbac/AssignmentSection'
@@ -315,6 +316,67 @@ function ResetPasswordSection({ userId }) {
   )
 }
 
+// ── Subcomponent: Zwei-Faktor-Authentifizierung (Admin-Reset) ─────────────────
+function TwoFactorAdminSection({ user, onRefresh }) {
+  const { t } = useTranslation()
+  const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleReset = async () => {
+    setError('')
+    setBusy(true)
+    setConfirm(false)
+    try {
+      await resetUser2fa(user.id)
+      onRefresh()
+    } catch (err) {
+      setError(err.response?.data?.detail ?? t('admin.user_form.tfa_reset_error'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="border-t border-gray-200 dark:border-zinc-700 pt-4">
+      <h3 className="text-xs font-medium text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-3">
+        {t('admin.user_form.tfa_section')}
+      </h3>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-gray-700 dark:text-zinc-300">
+          {user.totp_enabled ? t('admin.user_form.tfa_active') : t('admin.user_form.tfa_inactive')}
+        </p>
+        {user.totp_enabled && !confirm && (
+          <button
+            type="button"
+            onClick={() => { setError(''); setConfirm(true) }}
+            disabled={busy}
+            className="btn-danger"
+          >
+            {t('admin.user_form.tfa_reset_btn')}
+          </button>
+        )}
+      </div>
+      {confirm && (
+        <div className="mt-2 flex items-center justify-between gap-3 bg-portal-warn/10 border border-portal-warn/30 px-3 py-2">
+          <p className="text-xs text-portal-warn">{t('admin.user_form.tfa_reset_confirm')}</p>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" onClick={handleReset} disabled={busy} className="btn-danger">
+              {t('admin.user_form.tfa_reset_yes')}
+            </button>
+            <button type="button" onClick={() => setConfirm(false)} className="btn-secondary">
+              {t('admin.user_form.tfa_reset_cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p className="mt-2 text-xs text-portal-danger bg-portal-danger/10 border border-portal-danger/30 px-2 py-1.5">{error}</p>
+      )}
+    </div>
+  )
+}
+
 // Core-Permissions ohne Plus-only Einträge (manage_pools, manage_playbook_permissions wandern in Plus).
 // Extra Plus-Permissions kommen zur Laufzeit via useCapabilityList('extra_portal_permissions').
 const CORE_PORTAL_PERMISSIONS = [
@@ -327,6 +389,7 @@ const CORE_PORTAL_PERMISSIONS = [
   'manage_networks',
   'manage_sdn',
   'manage_firewall',
+  'manage_ha',
   'view_logs',
 ]
 
@@ -620,6 +683,11 @@ export default function UserForm({ user, onSuccess, onCancel }) {
       {/* Passwort zurücksetzen – nur im Edit-Mode */}
       {isEdit && (
         <ResetPasswordSection userId={user.id} />
+      )}
+
+      {/* PROJ-106: Zwei-Faktor-Authentifizierung (Admin-Reset) – nur im Edit-Mode */}
+      {isEdit && (
+        <TwoFactorAdminSection user={user} onRefresh={onSuccess} />
       )}
 
       {/* Ressourcen-Zuweisungen – nur im Edit-Mode */}

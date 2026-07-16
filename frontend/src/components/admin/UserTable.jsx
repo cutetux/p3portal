@@ -1,6 +1,6 @@
 // p3portal.org
 import { useState, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { deleteUser, setPortalPermissions } from '../../api/admin'
 import UserDeleteOwnershipStep from '../../features/owners/components/UserDeleteOwnershipStep'
 
@@ -100,10 +100,13 @@ export default function UserTable({ users, onRefresh, onEdit }) {
       {/* Delete confirmation */}
       {confirmDelete && (
         <div className="mb-3 p-3 bg-portal-danger/10 border border-portal-danger/30 flex items-center justify-between gap-4">
-          <p
-            className="text-sm text-portal-danger"
-            dangerouslySetInnerHTML={{ __html: t('admin.user_table.confirm_delete', { username: confirmDelete.username }) }}
-          />
+          <p className="text-sm text-portal-danger">
+            <Trans
+              i18nKey="admin.user_table.confirm_delete"
+              values={{ username: confirmDelete.username }}
+              components={{ strong: <strong /> }}
+            />
+          </p>
           <div className="flex gap-2 shrink-0">
             <button
               onClick={() => handleDelete(confirmDelete)}
@@ -151,6 +154,7 @@ export default function UserTable({ users, onRefresh, onEdit }) {
                   <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500">{t('admin.user_table.col_username')}</th>
                   <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500">{t('admin.user_table.col_role')}</th>
                   <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500">{t('admin.user_table.col_status')}</th>
+                  <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500 hidden md:table-cell">{t('admin.user_table.col_2fa')}</th>
                   <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500 hidden sm:table-cell">{t('admin.user_table.col_groups')}</th>
                   <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500 hidden md:table-cell">{t('admin.user_table.col_presets')}</th>
                   <th className="text-left py-2 px-3 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-zinc-500">{t('admin.user_table.col_logs')}</th>
@@ -175,6 +179,15 @@ export default function UserTable({ users, onRefresh, onEdit }) {
                       }`}>
                         {u.active ? t('admin.user_table.status_active') : t('admin.user_table.status_inactive')}
                       </span>
+                    </td>
+                    <td className="py-2.5 px-3 hidden md:table-cell">
+                      {u.totp_enabled ? (
+                        <span className="inline-block px-2 py-0.5 text-xs bg-portal-success/10 text-portal-success border border-portal-success/30">
+                          {t('admin.user_table.tfa_on')}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-300 dark:text-zinc-600">—</span>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 hidden sm:table-cell">
                       <div className="flex flex-wrap gap-1">

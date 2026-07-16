@@ -1,5 +1,6 @@
 // p3portal.org
 import api from './client'
+import { getToken } from './tokenStorage'
 
 export async function startJob(playbook, params, autoAssignOwner = false, poolId = null, opts = {}) {
   const body = { playbook, params, auto_assign_owner: autoAssignOwner }
@@ -37,6 +38,6 @@ export async function cancelJob(id) {
 
 export function createJobLogSocket(id) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const token = sessionStorage.getItem('token')
+  const token = getToken()
   return new WebSocket(`${proto}://${window.location.host}/api/jobs/${id}/logs/ws?token=${token}`)
 }

@@ -42,6 +42,7 @@ def _row_to_user(row) -> UserResponse:
         portal_permissions=perms,
         group_names=group_names,
         preset_names=preset_names,
+        totp_enabled=bool(row["totp_enabled"]) if "totp_enabled" in row.keys() else False,
     )
 
 

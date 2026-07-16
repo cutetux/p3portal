@@ -5,10 +5,14 @@ import { Link } from 'react-router-dom'
 import StatusBadge from '../ui/StatusBadge'
 import VmActionButtons from '../vms/VmActionButtons'
 import SnapshotModal from '../vms/SnapshotModal'
+import CloneModal from '../vms/CloneModal'
+import MigrateModal from '../vms/MigrateModal'
+import ConvertTemplateModal from '../vms/ConvertTemplateModal'
 import BulkActionToolbar from './BulkActionToolbar'
 import useVmIps, { vmIpKey } from '../../hooks/useVmIps'
 import { deleteVm, checkVmSsh } from '../../api/vms'
 import { useDependencyImpactGuard } from '../vms/useDependencyImpactGuard'
+import { useIpamReleaseGuard } from '../vms/useIpamReleaseGuard'
 import { useBulkOwners } from '../../features/owners/hooks/useOwners'
 import OwnerColumn from '../../features/owners/components/OwnerColumn'
 import ConfirmModal from '../common/ConfirmModal'
@@ -240,10 +244,12 @@ function DeleteVmButton({ vm, onRequestDelete, busy }) {
 
 export default function VmTable({ vms, userRole, onRefresh, viewMode = 'compact' }) {
   const [snapshotVm, setSnapshotVm] = useState(null)
+  const [lifecycle, setLifecycle]   = useState(null)   // PROJ-102: { type, vm }
   const [feedback, setFeedback]     = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteBusy, setDeleteBusy] = useState(null)
   const { guardedRun, impactModal } = useDependencyImpactGuard()  // PROJ-96
+  const { guardedRun: ipamGuardedRun, ipamModal } = useIpamReleaseGuard()  // PROJ-42 Ph2
 
   const [sortCol, setSortCol] = useState(() => {
     try { return JSON.parse(localStorage.getItem('p3-vmtable-sort'))?.col ?? 'id' } catch { return 'id' }
@@ -355,6 +361,22 @@ export default function VmTable({ vms, userRole, onRefresh, viewMode = 'compact'
   function handleBulkDone() {
     setSelected(new Set())
     setTimeout(() => onRefresh?.(), 3000)
+  }
+
+  // PROJ-102: Lebenszyklus-Menüeinträge (Core-Einzelaktion). Migrate/Convert nur
+  // bei gestopptem Gast anbieten; der Backend-Guard (Stack-Block/State) bleibt die
+  // maßgebliche Absicherung, die Modals melden 409 nutzerlesbar.
+  const lifecycleItems = (vm) => {
+    const lvm = { vmid: vm.vmid, node: vm.node, type: vm.type, name: vm.name, is_template: isTemplate(vm) }
+    const items = []
+    if (canDo(vm, 'clone')) items.push({ label: 'Klonen', onClick: () => setLifecycle({ type: 'clone', vm: lvm }) })
+    if (canDo(vm, 'migrate') && vm.status === 'stopped') {
+      items.push({ label: 'Migrieren', onClick: () => setLifecycle({ type: 'migrate', vm: lvm }) })
+    }
+    if (canDo(vm, 'template') && vm.status === 'stopped') {
+      items.push({ label: 'Zu Template', onClick: () => setLifecycle({ type: 'template', vm: lvm }) })
+    }
+    return items
   }
 
   if (vms.length === 0) {
@@ -533,6 +555,7 @@ export default function VmTable({ vms, userRole, onRefresh, viewMode = 'compact'
                           />
                           <OverflowMenu items={[
                             ...(canDo(vm, 'snapshot') ? [{ label: 'Snapshots', onClick: () => setSnapshotVm(vm) }] : []),
+                            ...lifecycleItems(vm),
                             ...((isAdmin || vmHasRbac(vm)) && canDo(vm, 'delete') ? [{ label: 'Löschen', onClick: () => setDeleteTarget(vm), danger: true }] : []),
                           ]} />
                         </div>
@@ -555,6 +578,7 @@ export default function VmTable({ vms, userRole, onRefresh, viewMode = 'compact'
                               busy={deleteBusy === vm.vmid}
                             />
                           )}
+                          <OverflowMenu items={lifecycleItems(vm)} />
                         </div>
                       )}
                     </td>
@@ -570,7 +594,19 @@ export default function VmTable({ vms, userRole, onRefresh, viewMode = 'compact'
         <SnapshotModal vm={snapshotVm} onClose={() => setSnapshotVm(null)} />
       )}
 
+      {/* PROJ-102: Lebenszyklus-Modals (Clone/Migrate/Convert), navigieren nach Erfolg in den Live-Log */}
+      {lifecycle?.type === 'clone' && (
+        <CloneModal vm={lifecycle.vm} onClose={() => setLifecycle(null)} />
+      )}
+      {lifecycle?.type === 'migrate' && (
+        <MigrateModal vm={lifecycle.vm} onClose={() => setLifecycle(null)} />
+      )}
+      {lifecycle?.type === 'template' && (
+        <ConvertTemplateModal vm={lifecycle.vm} onClose={() => setLifecycle(null)} />
+      )}
+
       {impactModal /* PROJ-96: Abhängigkeits-Impact-Dialog beim Löschen */}
+      {ipamModal /* PROJ-42 Ph2: IPAM-Freigabe-Dialog beim Löschen */}
 
       {deleteTarget && (
         <ConfirmModal
@@ -583,8 +619,16 @@ export default function VmTable({ vms, userRole, onRefresh, viewMode = 'compact'
             setDeleteTarget(null)
             setDeleteBusy(vm.vmid)
             try {
-              // PROJ-96: Löschen durchläuft die Abhängigkeits-Impact-Warnung.
-              await guardedRun((confirm) => deleteVm(vm.vmid, vm.node, { confirm }), 'Löschen')
+              // PROJ-96 + PROJ-42 Ph2: Löschen durchläuft erst die Abhängigkeits-,
+              // dann die IPAM-Freigabe-Warnung (beide 409+confirm, teilen das
+              // confirm-Flag; Backend prüft Dependency vor IPAM) – IPAM-Guard innen
+              // verschachtelt (analog HA-in-Stop PROJ-103).
+              await guardedRun(
+                (confirm) => ipamGuardedRun(
+                  (ic) => deleteVm(vm.vmid, vm.node, { confirm: confirm || ic }),
+                ),
+                'Löschen',
+              )
               showOk(`VM ${vm.vmid} wird gelöscht.`)
               onRefresh?.()
             } catch (err) {

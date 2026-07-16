@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, field_validator
 
-VALID_ACTIONS = {"view", "start", "stop", "reboot", "snapshot", "configure", "delete", "clone"}
+# PROJ-102: migrate/template neu, granular delegierbar (clone existierte bereits).
+VALID_ACTIONS = {
+    "view", "start", "stop", "reboot", "snapshot", "configure", "delete",
+    "clone", "migrate", "template",
+}
 
 
 def _validate_permissions(v: list[str]) -> list[str]:

@@ -34,6 +34,7 @@ from backend.routers import backup_jobs as backup_jobs_router
 from backend.routers import networks as networks_router
 from backend.routers import sdn as sdn_router
 from backend.routers import firewall as firewall_router
+from backend.routers import ha as ha_router
 # PROJ-70: scheduled_jobs_router wird via try/except unten eingehängt (Plus-only)
 from backend.routers import capabilities as capabilities_router
 from backend.core.license import get_license_status
@@ -123,7 +124,7 @@ _openapi_url = "/api/openapi.json" if settings.expose_api_docs else None
 
 app = FastAPI(
     title="P3 Portal",
-    version="v1.98.3-beta",
+    version="v1.105.3-beta",
     docs_url=_docs_url,
     redoc_url=None,
     openapi_url=_openapi_url,
@@ -171,6 +172,7 @@ app.include_router(backup_jobs_router.router)  # PROJ-78: Backup-Job-Verwaltung 
 app.include_router(networks_router.router)  # PROJ-79: Netzwerk-Verwaltung Node-Bridges/VLANs (Core)
 app.include_router(sdn_router.router)  # PROJ-80: SDN-Verwaltung Zonen/VNets/Subnets (Core, cluster-weit)
 app.include_router(firewall_router.router)  # PROJ-90: Firewall-Verwaltung Datacenter/Node/VM (Core)
+app.include_router(ha_router.router)  # PROJ-103: HA-Verwaltung Gruppen/Ressourcen/Status (Core, cluster-weit)
 # PROJ-70: Scheduled-Jobs-Router im Plus-Modul; 404 in Pure-Core
 try:
     from backend.plus.scheduled_jobs.router import router as sj_router, settings_router as sj_settings_router
@@ -244,6 +246,10 @@ app.include_router(tooling_router)
 from backend.features.node_updates.router import router as node_updates_router
 app.include_router(node_updates_router)
 
+# PROJ-42 Phase 1 – Core Simple-IPAM (Pools + best-effort Free-IP)
+from backend.features.ipam.router import router as ipam_router
+app.include_router(ipam_router)
+
 # PROJ-67 Phase 1 – F-002: Webhook-Allowlist
 from backend.routers.webhook_allowlist import router as webhook_allowlist_router
 app.include_router(webhook_allowlist_router)
@@ -306,6 +312,22 @@ try:
 except ImportError:
     logger.info("PROJ-96: backend.plus.dependencies nicht gefunden – Abhängigkeits-Endpunkte nicht registriert")
 
+# PROJ-101: Template-Replikation über Nodes (Plus-only; 404 für Core und unlizenziertes Plus)
+try:
+    from backend.plus.template_replication.router import router as template_replication_router
+    app.include_router(template_replication_router)
+except ImportError:
+    logger.info("PROJ-101: backend.plus.template_replication nicht gefunden – Replikations-Endpunkte nicht registriert")
+
+# PROJ-42 Phase 2: internes Plus-IPAM Router (Plus-only; 404 für Core und unlizenziertes Plus).
+# Ergänzt den immer aktiven Core-Simple-IPAM-Router (backend.features.ipam) um die
+# zustandsbehaftete Ebene: Allocations, Orphans, Netz-Freigaben, Toggles.
+try:
+    from backend.plus.ipam.router import router as ipam_plus_router
+    app.include_router(ipam_plus_router)
+except ImportError:
+    logger.info("PROJ-42: backend.plus.ipam nicht gefunden – IPAM-Plus-Endpunkte nicht registriert")
+
 
 @app.get("/api/health", tags=["meta"])
 async def health():
@@ -325,6 +347,30 @@ if _static_dir.is_dir():
     @app.get("/favicon.png", include_in_schema=False)
     async def favicon():
         return FileResponse(_static_dir / "favicon.png", media_type="image/png")
+
+    # PROJ-108: Installierbare PWA (Desktop-App). Manifest + Icons müssen VOR dem
+    # SPA-Catch-All ausgeliefert werden, sonst würde dieser index.html (HTML) statt
+    # der eigentlichen Datei zurückgeben. Muster identisch zur favicon-Route oben.
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    async def pwa_manifest():
+        return FileResponse(
+            _static_dir / "manifest.webmanifest",
+            media_type="application/manifest+json",
+        )
+
+    @app.get("/pwa-192.png", include_in_schema=False)
+    async def pwa_icon_192():
+        return FileResponse(_static_dir / "pwa-192.png", media_type="image/png")
+
+    @app.get("/pwa-512.png", include_in_schema=False)
+    async def pwa_icon_512():
+        return FileResponse(_static_dir / "pwa-512.png", media_type="image/png")
+
+    @app.get("/pwa-maskable-512.png", include_in_schema=False)
+    async def pwa_icon_maskable_512():
+        return FileResponse(
+            _static_dir / "pwa-maskable-512.png", media_type="image/png"
+        )
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):

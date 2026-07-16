@@ -167,6 +167,10 @@ class TestCapabilitiesMap:
             "ansible_editor",
             # PROJ-96: VM-Abhängigkeiten & Aktions-Impact-Warnung
             "vm_dependencies",
+            # PROJ-101: Template-Replikation über Nodes
+            "template_replication",
+            # PROJ-42 Phase 2: internes zustandsbehaftetes IPAM
+            "ipam_plus",
             # PROJ-64: Self-Approval-Gate (sync, editions-abhängig)
             "allow_self_approval_supported",
         }

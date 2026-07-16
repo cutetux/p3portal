@@ -3,6 +3,8 @@ import p3LogoImg from '../../assets/p3logo.png'
 import { Suspense } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
+import { getClusterStatus } from '../../api/cluster'
 import { useAuth } from '../../hooks/useAuth'
 import { useLicenseLimits } from '../../hooks/useLicenseLimits'
 import { useCapability } from '../../hooks/useCapability'
@@ -112,12 +114,24 @@ export default function V2Sidebar({ onNavClick }) {
     hasPerm('manage_users') || hasPerm('manage_nodes') ||
     hasPerm('manage_settings') || hasPerm('manage_api_keys')
   // PROJ-80: "Netzwerk" entry – visible if the user may manage node networking
-  // (PROJ-79) OR cluster SDN (PROJ-80). The page itself gates each area finer.
-  const showNetwork = hasPerm('manage_networks') || hasPerm('manage_sdn')
+  // (PROJ-79) OR cluster SDN (PROJ-80) OR IPAM pools (PROJ-42). The page itself
+  // gates each area finer. (Admins see it regardless via hasPerm.)
+  const showNetwork = hasPerm('manage_networks') || hasPerm('manage_sdn') || hasPerm('manage_ipam')
   // PROJ-90: "Firewall" entry – datacenter/node firewall. Lightweight gate on
   // manage_firewall (matching the Netzwerk entry); node:manage_firewall-only users
   // reach the firewall via the Compute-Node tab (AC-UI-3). The server enforces 403.
   const showFirewall = hasPerm('manage_firewall')
+  // PROJ-103: "Hochverfügbarkeit" entry – HA is cluster-only (needs quorum/ha-manager).
+  // Read is viewer+, so the only gate is a real cluster (node_count > 1); standalone/
+  // single-node installations hide the entry entirely (AC-GATE-1). The shared
+  // ['cluster','status'] query dedupes with the dashboard – no extra fetch cost.
+  const { data: clusterStatus } = useQuery({
+    queryKey: ['cluster', 'status'],
+    queryFn: () => getClusterStatus(),
+    staleTime: 60000,
+    retry: false,
+  })
+  const showHa = !isRestricted && (clusterStatus?.node_count ?? 0) > 1
 
   const location = useLocation()
   const acctTab = new URLSearchParams(location.search).get('tab')
@@ -188,6 +202,17 @@ export default function V2Sidebar({ onNavClick }) {
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <span>Firewall</span>
+          </NavLink>
+        )}
+
+        {/* PROJ-103: Hochverfügbarkeit (HA) – cluster-only, viewer+ read / manage_ha write */}
+        {showHa && (
+          <NavLink to="/ha" className={navLinkCls} onClick={handleClick}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-4 h-4 shrink-0">
+              <path d="M12 2s7 3 7 9c0 5-3.5 8-7 9-3.5-1-7-4-7-9 0-6 7-9 7-9z" />
+              <path d="M9 12l2 2 4-4" />
+            </svg>
+            <span>{t('ha.title')}</span>
           </NavLink>
         )}
 

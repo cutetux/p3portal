@@ -1,8 +1,11 @@
 // p3portal.org
-import { useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback } from 'react'
 import { fetchProxmoxTemplates, deleteProxmoxTemplate } from '../../api/packer'
 import { usePackerNodes } from '../../hooks/usePackerNodes'
 import { useAuth } from '../../hooks/useAuth'
+import { useCapability } from '../../hooks/useCapability'
+import { PlusComponents } from '../../plus'
+import PlusBadge from '../common/PlusBadge'
 import ConfirmModal from '../common/ConfirmModal'
 
 const inputBase =
@@ -24,7 +27,9 @@ function TmplBadge({ type }) {
   )
 }
 
-function TemplateRow({ tmpl, isAdmin, onRequestDelete, busy, error }) {
+function TemplateRow({ tmpl, isAdmin, canReplicate, onReplicate, onRequestDelete, busy, error }) {
+  // PROJ-101: Replikation ist QEMU-only – CT-Templates bekommen die Aktion nicht.
+  const showReplicate = canReplicate && tmpl.type !== 'lxc'
   return (
     <tr className="border-b border-gray-100 dark:border-zinc-700/50 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors opacity-75">
       <td className="px-4 py-2 text-xs tabular-nums text-gray-500 dark:text-zinc-400">{tmpl.vmid}</td>
@@ -34,22 +39,34 @@ function TemplateRow({ tmpl, isAdmin, onRequestDelete, busy, error }) {
       <td className="px-4 py-2 text-xs tabular-nums text-gray-500 dark:text-zinc-400">{formatCtime(tmpl.ctime)}</td>
       <td className="px-4 py-3 text-right">
         {error && <span className="text-xs text-red-500 mr-2">{error}</span>}
-        {isAdmin && (
-          <button
-            onClick={() => onRequestDelete(tmpl)}
-            disabled={busy}
-            className="btn-table-danger"
-          >
-            {busy ? '…' : 'Löschen'}
-          </button>
-        )}
+        <div className="inline-flex items-center gap-2">
+          {showReplicate && (
+            <button
+              onClick={() => onReplicate(tmpl)}
+              className="btn-table inline-flex items-center gap-1"
+              title="Auf Nodes replizieren"
+            >
+              Replizieren
+              <PlusBadge className="w-3.5 h-3.5 text-portal-success" />
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => onRequestDelete(tmpl)}
+              disabled={busy}
+              className="btn-table-danger"
+            >
+              {busy ? '…' : 'Löschen'}
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   )
 }
 
 export default function ProxmoxTemplatesTab() {
-  const { role } = useAuth()
+  const { role, portalPermissions } = useAuth()
   const [templates, setTemplates] = useState([])
   const [templatesLoading, setTemplatesLoading] = useState(true)
   const [templatesError, setTemplatesError] = useState(null)
@@ -57,7 +74,12 @@ export default function ProxmoxTemplatesTab() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteBusy, setDeleteBusy] = useState(null)
   const [deleteError, setDeleteError] = useState({})
+  const [replicateTarget, setReplicateTarget] = useState(null)
   const isAdmin = role === 'admin'
+  // PROJ-101: Replikations-Aktion nur bei Plus + (Admin ODER Permission).
+  const replicationCap = useCapability('template_replication')
+  const canReplicate = replicationCap && (isAdmin || (portalPermissions ?? []).includes('replicate_templates'))
+  const ReplicateTemplateModal = PlusComponents.ReplicateTemplateModal
 
   const {
     nodes, nodesLoading, nodesError, fetchNodes,
@@ -205,6 +227,8 @@ export default function ProxmoxTemplatesTab() {
                   key={tmpl.vmid}
                   tmpl={tmpl}
                   isAdmin={isAdmin}
+                  canReplicate={canReplicate}
+                  onReplicate={setReplicateTarget}
                   onRequestDelete={setDeleteTarget}
                   busy={deleteBusy === tmpl.vmid}
                   error={deleteError[tmpl.vmid]}
@@ -224,6 +248,12 @@ export default function ProxmoxTemplatesTab() {
           onConfirm={executeDelete}
           onClose={() => setDeleteTarget(null)}
         />
+      )}
+
+      {replicateTarget && canReplicate && ReplicateTemplateModal && (
+        <Suspense fallback={null}>
+          <ReplicateTemplateModal tmpl={replicateTarget} onClose={() => setReplicateTarget(null)} />
+        </Suspense>
       )}
     </div>
   )

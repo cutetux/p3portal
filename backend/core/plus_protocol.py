@@ -402,6 +402,10 @@ class PlusProtocol(Protocol):
         self, portal_node_id: int, vmid: int
     ) -> list[dict]: ...
 
+    # ── PROJ-101: Template-Replikation über Nodes ────────────────────────────
+
+    def can_use_template_replication(self) -> bool: ...
+
     async def on_vm_lxc_deleted_dependencies(
         self, portal_node_id: int, vmid: int, username: str
     ) -> int: ...
@@ -409,6 +413,42 @@ class PlusProtocol(Protocol):
     async def on_cluster_refresh_vanished_resources_dependencies(
         self, still_visible_vmids: set, portal_node_id: int
     ) -> int: ...
+
+    # ── PROJ-42 Phase 2: internes Plus-IPAM ──────────────────────────────────
+
+    def can_use_ipam_plus(self) -> bool: ...
+
+    async def ipam_reserved_ips(self, pool_id: int) -> set: ...
+
+    async def on_playbook_job_started_ipam(
+        self, job_id: str, playbook: str, params: dict, username: str
+    ) -> int: ...
+
+    async def on_job_finished_ipam(self, job_id: str, success: bool) -> int: ...
+
+    async def ipam_assert_pool_deletable(self, pool_id: int) -> None: ...
+
+    async def on_vm_lxc_deleted_ipam(
+        self, portal_node_id: int, vmid: int, username: str
+    ) -> int: ...
+
+    async def on_cluster_refresh_vanished_resources_ipam(
+        self, still_visible_vmids: set, portal_node_id: int
+    ) -> int: ...
+
+    async def ipam_release_impact(
+        self, portal_node_id: int, vmid: int
+    ) -> list[dict]: ...
+
+    async def filter_visible_networks(
+        self, user, bridges: list, vnets: list, node: str
+    ) -> tuple: ...
+
+    async def ipam_filter_pools(self, user, pools: list) -> list: ...
+
+    async def get_ipam_allocation_for_vm(
+        self, portal_node_id: int, vmid: int
+    ) -> dict | None: ...
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -576,6 +616,11 @@ class CorePlusBehavior:
     @gate
     def can_use_dependencies(self) -> bool:
         # PROJ-96: VM-Abhängigkeiten & Aktions-Impact-Warnung sind Plus-only.
+        return False
+
+    @gate
+    def can_use_template_replication(self) -> bool:
+        # PROJ-101: Template-Replikation über Nodes ist Plus-only.
         return False
 
     # ── Limit-Hooks ──────────────────────────────────────────────────────────
@@ -997,6 +1042,71 @@ class CorePlusBehavior:
     ) -> int:
         return 0
 
+    # ── PROJ-42 Phase 2: internes Plus-IPAM (Core: zustandslos, kein Store) ────
+
+    @gate
+    def can_use_ipam_plus(self) -> bool:
+        # PROJ-42 Phase 2: zustandsbehaftetes IPAM (Allocations/Lebenszyklus/Grants) ist Plus-only.
+        return False
+
+    @gate
+    async def ipam_reserved_ips(self, pool_id: int) -> set:
+        # Core: kein Allocation-Store → keine reservierten IPs (best-effort bleibt live aus Proxmox).
+        return set()
+
+    @gate
+    async def on_playbook_job_started_ipam(
+        self, job_id: str, playbook: str, params: dict, username: str
+    ) -> int:
+        return 0
+
+    @gate
+    async def on_job_finished_ipam(self, job_id: str, success: bool) -> int:
+        return 0
+
+    @gate
+    async def ipam_assert_pool_deletable(self, pool_id: int) -> None:
+        # Core: keine Allocations → Pool immer löschbar (kein Block).
+        return None
+
+    @gate
+    async def on_vm_lxc_deleted_ipam(
+        self, portal_node_id: int, vmid: int, username: str
+    ) -> int:
+        return 0
+
+    @gate
+    async def on_cluster_refresh_vanished_resources_ipam(
+        self, still_visible_vmids: set, portal_node_id: int
+    ) -> int:
+        return 0
+
+    @gate
+    async def ipam_release_impact(
+        self, portal_node_id: int, vmid: int
+    ) -> list[dict]:
+        # Core: kein Store → kein Freigabe-Impact (Hook No-Op).
+        return []
+
+    @gate
+    async def filter_visible_networks(
+        self, user, bridges: list, vnets: list, node: str
+    ) -> tuple:
+        # Core: keine Netz-Freigaben → alle Netze sichtbar (Identität, kein Bruch).
+        return bridges, vnets
+
+    @gate
+    async def ipam_filter_pools(self, user, pools: list) -> list:
+        # Core: kein Grant-Konzept → alle Pools durchreichen.
+        return pools
+
+    @gate
+    async def get_ipam_allocation_for_vm(
+        self, portal_node_id: int, vmid: int
+    ) -> dict | None:
+        # Core: kein Store → keine Allocation-Anzeige.
+        return None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher – schaltet pro Aufruf zwischen Core und Plus
@@ -1162,6 +1272,10 @@ CAPABILITIES: dict[str, str] = {
     "ansible_editor":                 "can_use_ansible_editor",
     # PROJ-96: VM-Abhängigkeiten & Aktions-Impact-Warnung
     "vm_dependencies":                "can_use_dependencies",
+    # PROJ-101: Template-Replikation über Nodes
+    "template_replication":           "can_use_template_replication",
+    # PROJ-42 Phase 2: internes zustandsbehaftetes IPAM
+    "ipam_plus":                      "can_use_ipam_plus",
     # PROJ-64: Self-Approval-Gate (sync, editions-abhängig)
     "allow_self_approval_supported":  "allow_self_approval_supported",
 }

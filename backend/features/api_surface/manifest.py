@@ -436,6 +436,126 @@ SCOPE_MANIFEST: tuple[ScopeManifestEntry, ...] = (
             "<HOST>/api/firewall/vms/100/rules?node=pve"
         ),
     ),
+    # PROJ-103: HA-Verwaltung (Core, cluster-weit). Read viewer+, Write manage_ha.
+    ScopeManifestEntry(
+        name="ha:read",
+        description_key="scope.ha_read.desc",
+        endpoints=(
+            ScopeEndpoint("GET", "/api/ha/status", "scope.ha_read.ep.status"),
+            ScopeEndpoint("GET", "/api/ha/rules", "scope.ha_read.ep.rules"),
+            ScopeEndpoint("GET", "/api/ha/resources", "scope.ha_read.ep.resources"),
+        ),
+        curl_example=(
+            'curl -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/ha/status"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="ha:write",
+        description_key="scope.ha_write.desc",
+        endpoints=(
+            ScopeEndpoint("POST", "/api/ha/rules", "scope.ha_write.ep.rule_create"),
+            ScopeEndpoint("POST", "/api/ha/resources", "scope.ha_write.ep.resource_create"),
+            ScopeEndpoint("POST", "/api/ha/resources/{sid}/migrate", "scope.ha_write.ep.migrate"),
+            ScopeEndpoint("POST", "/api/ha/resources/{sid}/relocate", "scope.ha_write.ep.relocate"),
+        ),
+        curl_example=(
+            'curl -X POST -H "Authorization: Bearer <KEY>" '
+            '-H "Content-Type: application/json" '
+            '-d \'{"sid":"vm:100","state":"started"}\' '
+            "<HOST>/api/ha/resources"
+        ),
+    ),
+    # PROJ-42 Phase 1: IPAM-Pools (Core). Read = Pools/Deploy-Vorschlag, Write = Pool-CRUD.
+    ScopeManifestEntry(
+        name="ipam:read",
+        description_key="scope.ipam_read.desc",
+        endpoints=(
+            ScopeEndpoint("GET", "/api/ipam/pools", "scope.ipam_read.ep.pools"),
+            ScopeEndpoint("GET", "/api/ipam/pools/by-network", "scope.ipam_read.ep.by_network"),
+            ScopeEndpoint("GET", "/api/ipam/suggest", "scope.ipam_read.ep.suggest"),
+        ),
+        curl_example=(
+            'curl -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/ipam/pools"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="ipam:write",
+        description_key="scope.ipam_write.desc",
+        endpoints=(
+            ScopeEndpoint("POST", "/api/ipam/pools", "scope.ipam_write.ep.pool_create"),
+            ScopeEndpoint("PUT", "/api/ipam/pools/{pool_id}", "scope.ipam_write.ep.pool_update"),
+            ScopeEndpoint("DELETE", "/api/ipam/pools/{pool_id}", "scope.ipam_write.ep.pool_delete"),
+        ),
+        curl_example=(
+            'curl -X POST -H "Authorization: Bearer <KEY>" '
+            '-H "Content-Type: application/json" '
+            '-d \'{"kind":"bridge","network_name":"vmbr0","node":"pve","cidr":"192.168.2.0/24"}\' '
+            "<HOST>/api/ipam/pools"
+        ),
+    ),
+    # PROJ-42 Phase 2: internes Plus-IPAM (Plus-only). Allocations = Lebenszyklus/Usage/Orphans;
+    # Grants = Netz-Freigaben + Config-Toggles (Admin-Verwaltung).
+    ScopeManifestEntry(
+        name="ipam_allocations:read",
+        description_key="scope.ipam_allocations_read.desc",
+        plus_only=True,
+        endpoints=(
+            ScopeEndpoint("GET", "/api/ipam/allocations", "scope.ipam_allocations_read.ep.list"),
+            ScopeEndpoint("GET", "/api/ipam/pools/{pool_id}/usage", "scope.ipam_allocations_read.ep.usage"),
+            ScopeEndpoint("GET", "/api/ipam/orphans", "scope.ipam_allocations_read.ep.orphans"),
+        ),
+        curl_example=(
+            'curl -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/ipam/allocations?pool_id=1"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="ipam_allocations:write",
+        description_key="scope.ipam_allocations_write.desc",
+        plus_only=True,
+        endpoints=(
+            ScopeEndpoint("POST", "/api/ipam/allocations", "scope.ipam_allocations_write.ep.manual"),
+            ScopeEndpoint("DELETE", "/api/ipam/allocations/{alloc_id}", "scope.ipam_allocations_write.ep.release"),
+            ScopeEndpoint("DELETE", "/api/ipam/orphans", "scope.ipam_allocations_write.ep.orphan_release"),
+        ),
+        curl_example=(
+            'curl -X POST -H "Authorization: Bearer <KEY>" '
+            '-H "Content-Type: application/json" '
+            '-d \'{"pool_id":1,"ip":"192.168.2.50"}\' '
+            "<HOST>/api/ipam/allocations"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="ipam_grants:read",
+        description_key="scope.ipam_grants_read.desc",
+        plus_only=True,
+        endpoints=(
+            ScopeEndpoint("GET", "/api/ipam/grants", "scope.ipam_grants_read.ep.list"),
+            ScopeEndpoint("GET", "/api/ipam/config", "scope.ipam_grants_read.ep.config"),
+        ),
+        curl_example=(
+            'curl -H "Authorization: Bearer <KEY>" '
+            "<HOST>/api/ipam/grants"
+        ),
+    ),
+    ScopeManifestEntry(
+        name="ipam_grants:write",
+        description_key="scope.ipam_grants_write.desc",
+        plus_only=True,
+        endpoints=(
+            ScopeEndpoint("POST", "/api/ipam/grants", "scope.ipam_grants_write.ep.create"),
+            ScopeEndpoint("DELETE", "/api/ipam/grants/{grant_id}", "scope.ipam_grants_write.ep.delete"),
+            ScopeEndpoint("PUT", "/api/ipam/config", "scope.ipam_grants_write.ep.config"),
+        ),
+        curl_example=(
+            'curl -X POST -H "Authorization: Bearer <KEY>" '
+            '-H "Content-Type: application/json" '
+            '-d \'{"kind":"bridge","network_name":"vmbr0","node":"pve","grantee_kind":"user","grantee_id":2}\' '
+            "<HOST>/api/ipam/grants"
+        ),
+    ),
     # PROJ-10/63/81: VM-Mutationen (Core). VM-Reads bleiben unter cluster:read.
     ScopeManifestEntry(
         name="vms:write",

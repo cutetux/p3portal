@@ -7,10 +7,11 @@ import { AuthProvider, useAuth } from './useAuth'
 vi.mock('../api/auth', () => ({
   login: vi.fn(),
   loginLocal: vi.fn(),
+  loginTwoFactor: vi.fn(),
   logout: vi.fn(),
 }))
 
-import { login as mockLogin, loginLocal as mockLoginLocal, logout as mockLogout } from '../api/auth'
+import { login as mockLogin, loginLocal as mockLoginLocal, loginTwoFactor as mockLoginTwoFactor, logout as mockLogout } from '../api/auth'
 
 // Creates a minimal fake JWT with a given JSON payload
 function makeJwt(payload) {
@@ -48,6 +49,7 @@ const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>
 describe('useAuth', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    localStorage.clear()
     vi.clearAllMocks()
   })
 
@@ -283,5 +285,63 @@ describe('useAuth', () => {
 
     expect(result.current.jti).toBeNull()
     expect(result.current.mustChangePw).toBe(false)
+  })
+
+  // ── PROJ-109: "Angemeldet bleiben" (Persistenz-Wahl) ─────────────────────────
+
+  it('login(remember=true) legt Token in localStorage ab (nicht sessionStorage)', async () => {
+    mockLogin.mockResolvedValue({ access_token: 'jwt-remember', token_type: 'bearer' })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      await result.current.login('user', 'pass', 'pam', true)
+    })
+
+    expect(localStorage.getItem('token')).toBe('jwt-remember')
+    expect(sessionStorage.getItem('token')).toBeNull()
+    expect(result.current.isAuthenticated).toBe(true)
+  })
+
+  it('login(remember=false) bleibt in sessionStorage (Default)', async () => {
+    mockLogin.mockResolvedValue({ access_token: 'jwt-session', token_type: 'bearer' })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      await result.current.login('user', 'pass', 'pam', false)
+    })
+
+    expect(sessionStorage.getItem('token')).toBe('jwt-session')
+    expect(localStorage.getItem('token')).toBeNull()
+  })
+
+  it('loginLocal(remember=true) legt Token in localStorage ab', async () => {
+    mockLoginLocal.mockResolvedValue({ access_token: 'jwt-local-remember', token_type: 'bearer' })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      await result.current.loginLocal('user', 'pass', true)
+    })
+
+    expect(localStorage.getItem('token')).toBe('jwt-local-remember')
+    expect(sessionStorage.getItem('token')).toBeNull()
+  })
+
+  it('completeTwoFactor(remember=true) legt Token in localStorage ab', async () => {
+    mockLoginTwoFactor.mockResolvedValue({ access_token: 'jwt-2fa-remember', token_type: 'bearer' })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      await result.current.completeTwoFactor('pre-auth', '123456', true)
+    })
+
+    expect(localStorage.getItem('token')).toBe('jwt-2fa-remember')
+    expect(sessionStorage.getItem('token')).toBeNull()
+  })
+
+  it('initialisiert authentifiziert, wenn Token nur in localStorage liegt', () => {
+    localStorage.setItem('token', 'persisted-jwt')
+    render(<AuthProvider><TestConsumer /></AuthProvider>)
+    expect(screen.getByTestId('auth-status').textContent).toBe('authenticated')
+    expect(screen.getByTestId('token').textContent).toBe('persisted-jwt')
   })
 })

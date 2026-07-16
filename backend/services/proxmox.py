@@ -444,6 +444,171 @@ class ProxmoxClient:
             )
             resp.raise_for_status()
 
+    # ── PROJ-103: HA management (groups / resources / status / runtime) ───────
+    # Cluster-wide (datacenter level, /cluster/ha/*), no ?node= inside the call —
+    # the caller resolves which installation via the portal-node token. State
+    # lives entirely in Proxmox (no local DB, SoT-Muster wie SDN). Config-CRUD is
+    # applied immediately by the HA manager (no apply/revert step); the runtime
+    # actions migrate/relocate only enqueue a CRM command (no task UPID).
+
+    async def get_ha_status_current(self, auth: ProxmoxAuth) -> list[dict]:
+        """GET /cluster/ha/status/current → mixed list (quorum/master/lrm/service).
+
+        Raises on non-2xx so the router can map 404→ha_unavailable (like SDN).
+        """
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/cluster/ha/status/current",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", []) or []
+        return [e for e in data if isinstance(e, dict)]
+
+    async def get_ha_manager_status(self, auth: ProxmoxAuth) -> dict:
+        """GET /cluster/ha/status/manager_status → raw manager status dict (best-effort)."""
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/cluster/ha/status/manager_status",
+                **self._auth_kwargs(auth),
+            )
+            if resp.status_code == 404:
+                return {}
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+        return data if isinstance(data, dict) else {}
+
+    async def get_ha_rules(self, auth: ProxmoxAuth, rtype: str | None = None) -> list[dict]:
+        """GET /cluster/ha/rules → raw rule dicts (PVE 9; replaces HA groups).
+
+        Optional ``rtype`` filters by rule type (node-affinity/resource-affinity).
+        """
+        params = {"type": rtype} if rtype else None
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/cluster/ha/rules",
+                params=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", []) or []
+        return [r for r in data if isinstance(r, dict)]
+
+    async def get_ha_rule(self, auth: ProxmoxAuth, rule: str) -> dict:
+        """GET /cluster/ha/rules/{rule} → single rule dict."""
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/cluster/ha/rules/{rule}",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+        return data if isinstance(data, dict) else {}
+
+    async def create_ha_rule(self, auth: ProxmoxAuth, params: dict) -> None:
+        """POST /cluster/ha/rules (applied immediately)."""
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/api2/json/cluster/ha/rules",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def update_ha_rule(self, auth: ProxmoxAuth, rule: str, params: dict) -> None:
+        """PUT /cluster/ha/rules/{rule} (applied immediately)."""
+        async with self._client() as client:
+            resp = await client.put(
+                f"{self._base}/api2/json/cluster/ha/rules/{rule}",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def delete_ha_rule(self, auth: ProxmoxAuth, rule: str) -> None:
+        """DELETE /cluster/ha/rules/{rule}. Removing a rule drops the constraint only."""
+        async with self._client() as client:
+            resp = await client.delete(
+                f"{self._base}/api2/json/cluster/ha/rules/{rule}",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def get_ha_resources(self, auth: ProxmoxAuth) -> list[dict]:
+        """GET /cluster/ha/resources → raw resource dicts."""
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/cluster/ha/resources",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", []) or []
+        return [r for r in data if isinstance(r, dict)]
+
+    async def get_ha_resource(self, auth: ProxmoxAuth, sid: str) -> dict:
+        """GET /cluster/ha/resources/{sid} → single resource dict."""
+        async with self._client() as client:
+            resp = await client.get(
+                f"{self._base}/api2/json/cluster/ha/resources/{sid}",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+        return data if isinstance(data, dict) else {}
+
+    async def create_ha_resource(self, auth: ProxmoxAuth, params: dict) -> None:
+        """POST /cluster/ha/resources (applied immediately)."""
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/api2/json/cluster/ha/resources",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def update_ha_resource(self, auth: ProxmoxAuth, sid: str, params: dict) -> None:
+        """PUT /cluster/ha/resources/{sid} (applied immediately)."""
+        async with self._client() as client:
+            resp = await client.put(
+                f"{self._base}/api2/json/cluster/ha/resources/{sid}",
+                data=params,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def delete_ha_resource(self, auth: ProxmoxAuth, sid: str) -> None:
+        """DELETE /cluster/ha/resources/{sid} → back to manual (non-HA) operation."""
+        async with self._client() as client:
+            resp = await client.delete(
+                f"{self._base}/api2/json/cluster/ha/resources/{sid}",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def ha_migrate_resource(self, auth: ProxmoxAuth, sid: str, node: str) -> None:
+        """POST /cluster/ha/resources/{sid}/migrate → enqueue a CRM migrate command.
+
+        Returns no task UPID (the HA manager carries it out asynchronously); the
+        caller polls the HA status of the sid for progress (ha_action_service).
+        """
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/api2/json/cluster/ha/resources/{sid}/migrate",
+                data={"node": node},
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
+    async def ha_relocate_resource(self, auth: ProxmoxAuth, sid: str, node: str) -> None:
+        """POST /cluster/ha/resources/{sid}/relocate → enqueue a CRM relocate command."""
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._base}/api2/json/cluster/ha/resources/{sid}/relocate",
+                data={"node": node},
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+
     # ── PROJ-90: Firewall management (datacenter / node / guest) ──────────────
     # Proxmox firewall lives entirely in Proxmox (no local DB). Rules apply live —
     # the pve-firewall daemon watches /etc/pve/firewall/ — so there is no
@@ -773,7 +938,15 @@ class ProxmoxClient:
             return resp.json().get("data", [])
 
     async def get_ha_status_v2(self, auth: ProxmoxAuth) -> str:
-        """Return HA status string; returns 'none' when HA is not configured."""
+        """Return HA status string: 'active' when the HA manager runs, else 'none'.
+
+        ``/cluster/ha/status/current`` returns an **array** of entries
+        (quorum / master / lrm / crm / service), not a dict. The previous
+        implementation read it as a dict (``data.get("status")``) and therefore
+        always fell through to ``"none"`` — so the cluster status badge showed
+        "HA inaktiv" even when HA was active (fixed S748). HA is considered active
+        when a CRM master is active OR at least one HA resource (service) exists.
+        """
         async with self._client() as client:
             resp = await client.get(
                 f"{self._base}/api2/json/cluster/ha/status/current",
@@ -782,8 +955,21 @@ class ProxmoxClient:
             if resp.status_code == 404:
                 return "none"
             resp.raise_for_status()
-            data = resp.json().get("data", {})
-            return data.get("status", "none") if isinstance(data, dict) else "none"
+            data = resp.json().get("data", [])
+        entries = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
+        has_active_master = False
+        has_service = False
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            etype = str(e.get("type", "")).lower()
+            if etype == "master":
+                st = str(e.get("status", "")).lower()
+                if st == "" or "active" in st:
+                    has_active_master = True
+            elif etype == "service":
+                has_service = True
+        return "active" if (has_active_master or has_service) else "none"
 
     # ── Single-Node reads – Basis edition (PROJ-16) ──────────────────────────
 
@@ -1015,6 +1201,121 @@ class ProxmoxClient:
             )
             resp.raise_for_status()
             return resp.json().get("data", "")
+
+    # ── VM/LXC Lifecycle primitives (PROJ-102) ────────────────────────────────
+    # Generic, "dumb" wrappers around Proxmox clone/migrate/template. No business
+    # logic (RBAC / stack-block / owner) lives here — that stays in the router /
+    # job-worker. QEMU and LXC share the ``_vm_base`` path switch; the only real
+    # difference is QEMU ``name`` vs LXC ``hostname``. Dormant in Core (no endpoint
+    # exercises them there without the new RBAC action); reused by PROJ-101 later.
+
+    async def clone_vm(
+        self,
+        auth: ProxmoxAuth,
+        node: str,
+        vmid: int,
+        newid: int,
+        name: str | None = None,
+        target_storage: str | None = None,
+        full: bool = True,
+        vm_type: str = "qemu",
+    ) -> str:
+        """Clone a VM/LXC on the same node. Returns the Proxmox task UPID.
+
+        ``full=True`` → independent full clone (``target_storage`` selects where
+        the copied volumes land). ``full=False`` → linked clone (only valid when
+        the source is a template; Proxmox rejects it otherwise). QEMU uses
+        ``name``; LXC uses ``hostname`` for the same value.
+        """
+        body: dict = {"newid": newid, "full": 1 if full else 0}
+        if name:
+            body["hostname" if vm_type == "lxc" else "name"] = name
+        # A linked clone must not carry a target storage (Proxmox rejects it).
+        if full and target_storage:
+            body["storage"] = target_storage
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._vm_base(node, vmid, vm_type)}/clone",
+                data=body,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            return resp.json().get("data", "") or ""
+
+    async def migrate_vm(
+        self,
+        auth: ProxmoxAuth,
+        node: str,
+        vmid: int,
+        target_node: str,
+        target_storage: str | None = None,
+        vm_type: str = "qemu",
+    ) -> str:
+        """Offline-migrate a VM/LXC to another node in the same cluster.
+
+        Returns the Proxmox task UPID. QEMU migrates offline with local disks
+        (``online=0`` + ``with-local-disks=1``); LXC migrates offline
+        (``online=0``, no ``restart``). ``target_storage`` maps local volumes to
+        a storage on the destination node when given.
+        """
+        body: dict = {"target": target_node}
+        if vm_type == "lxc":
+            body["online"] = 0
+        else:
+            body["online"] = 0
+            body["with-local-disks"] = 1
+        if target_storage:
+            body["targetstorage"] = target_storage
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._vm_base(node, vmid, vm_type)}/migrate",
+                data=body,
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            return resp.json().get("data", "") or ""
+
+    async def convert_to_template(
+        self, auth: ProxmoxAuth, node: str, vmid: int, vm_type: str = "qemu"
+    ) -> str:
+        """Convert a stopped VM/LXC into a template.
+
+        Both QEMU (``.../qemu/{vmid}/template``) and LXC (``pct template`` =
+        ``.../lxc/{vmid}/template``) end up as ``template=1``. This call is
+        typically synchronous and returns an empty UPID — the caller treats an
+        empty result as immediate success.
+        """
+        async with self._client() as client:
+            resp = await client.post(
+                f"{self._vm_base(node, vmid, vm_type)}/template",
+                **self._auth_kwargs(auth),
+            )
+            resp.raise_for_status()
+            return resp.json().get("data", "") or ""
+
+    async def get_task_log(
+        self, auth: ProxmoxAuth, node: str, upid: str, start: int = 0, limit: int = 500
+    ) -> list[dict]:
+        """Return Proxmox task log lines ``[{n, t}, ...]`` from ``start`` (0-based).
+
+        Feeds the live-log tail for lifecycle jobs. Returns [] on any error so a
+        transient log-read failure never aborts the polling loop.
+        """
+        try:
+            async with self._client() as client:
+                resp = await client.get(
+                    f"{self._base}/api2/json/nodes/{node}/tasks/{upid}/log",
+                    params={"start": start, "limit": limit},
+                    **self._auth_kwargs(auth),
+                )
+                resp.raise_for_status()
+                return resp.json().get("data", [])
+        except Exception:
+            return []
+
+    async def get_node_rootdir_storages(self, auth: ProxmoxAuth, node: str) -> list[dict]:
+        """Return storages on *node* that can hold LXC rootfs volumes (PROJ-102)."""
+        return await self._get_node_storages(auth, node, "rootdir")
 
     # ── VM Detail Page methods (PROJ-29) ──────────────────────────────────────
 

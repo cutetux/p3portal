@@ -20,6 +20,7 @@ class CurrentUser:
     role: str            # "admin" | "operator" | "viewer"
     jti: str | None = field(default=None)
     must_change_pw: bool = field(default=False)
+    must_setup_2fa: bool = field(default=False)  # PROJ-106: Enforce ohne eingerichtetes 2FA
     portal_permissions: list = field(default_factory=list)  # e.g. ["view_logs"]
     user_id: int | None = field(default=None)  # PROJ-49: local_users.id (None für Proxmox-Auth)
     # PROJ-44: Auth-Quelle + Key-Scopes (nur bei upk_, sonst None)
@@ -121,6 +122,10 @@ async def get_current_user(
 
     try:
         payload = decode_access_token(token)
+        # PROJ-106: Das 2FA-Pre-Auth-("Halb"-)Token darf NIEMALS eine geschützte
+        # Route öffnen – es dient allein der Challenge (/auth/login/2fa).
+        if payload.get("stage") == "2fa":
+            raise JWTError("pre-auth token")
         username: str | None = payload.get("sub")
         if not username:
             raise JWTError("missing sub")
@@ -128,6 +133,7 @@ async def get_current_user(
         role = payload.get("role", "operator")
         jti: str | None = payload.get("jti")
         must_change_pw: bool = bool(payload.get("must_change_pw", False))
+        must_setup_2fa: bool = bool(payload.get("must_setup_2fa", False))
         portal_permissions: list = payload.get("portal_permissions", [])
     except JWTError:
         raise HTTPException(
@@ -184,6 +190,7 @@ async def get_current_user(
         role=role,
         jti=jti,
         must_change_pw=must_change_pw,
+        must_setup_2fa=must_setup_2fa,
         portal_permissions=portal_permissions,
         user_id=user_id,
     )

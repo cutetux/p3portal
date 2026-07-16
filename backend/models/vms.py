@@ -126,6 +126,10 @@ class ImageStorageInfo(BaseModel):
     avail: int = 0      # bytes free
     total: int = 0      # bytes total
     used: int = 0       # bytes used
+    # PROJ-101: optionale Zusatzfelder (Alt-Konsumenten ignorieren sie → backward-compatible).
+    # `shared` treibt die storage-bewusste Weg-Entscheidung der Template-Replikation.
+    shared: bool = False
+    content: str = ""   # z.B. "images,rootdir"
 
 
 class DiskListResponse(BaseModel):
@@ -334,3 +338,87 @@ class BackupCreateRequest(BaseModel):
 class BackupDeleteRequest(BaseModel):
     volid: str
     storage: str
+
+
+# ── PROJ-102: VM/LXC Clone / Migrate / Convert-to-Template ─────────────────────
+
+_STORAGE_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+
+class CloneRequest(BaseModel):
+    """Clone a VM/LXC onto the same node (PROJ-102)."""
+    name: str = Field(..., min_length=1, max_length=63)
+    target_storage: str | None = None      # None → Proxmox default storage
+    newid: int | None = None               # None → auto next-free VMID
+    full: bool = True                      # False = linked clone (template source only)
+    set_owner: bool = True                 # AC-CLONE-3: assign triggering user as owner
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, v: str) -> str:
+        v = v.strip()
+        # Proxmox hostnames / VM names: letters, digits, hyphen, dot (DNS-ish).
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,62}", v):
+            raise ValueError("name must be a valid hostname (letters, digits, '.', '-')")
+        return v
+
+    @field_validator("target_storage")
+    @classmethod
+    def valid_storage(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if not _STORAGE_RE.fullmatch(v):
+            raise ValueError("target_storage contains invalid characters")
+        return v
+
+    @field_validator("newid")
+    @classmethod
+    def valid_newid(cls, v: int | None) -> int | None:
+        if v is not None and not (100 <= v <= 999999999):
+            raise ValueError("newid must be between 100 and 999999999")
+        return v
+
+
+class MigrateRequest(BaseModel):
+    """Offline-migrate a VM/LXC to another node in the same cluster (PROJ-102)."""
+    target_node: str = Field(..., min_length=1)
+    target_storage: str | None = None      # None → keep storage names on target
+
+    @field_validator("target_node")
+    @classmethod
+    def valid_target(cls, v: str) -> str:
+        v = v.strip()
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", v):
+            raise ValueError("target_node contains invalid characters")
+        return v
+
+    @field_validator("target_storage")
+    @classmethod
+    def valid_storage(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if not _STORAGE_RE.fullmatch(v):
+            raise ValueError("target_storage contains invalid characters")
+        return v
+
+
+class MigrationTargetsResponse(BaseModel):
+    """Nodes a VM/LXC may be migrated to (other cluster_nodes of the same
+    installation, without the current one). Empty list → single-node install."""
+    current_node: str
+    targets: list[str] = []
+
+
+class RootdirStorageInfo(BaseModel):
+    """A node storage that can hold LXC rootfs volumes (content 'rootdir')."""
+    name: str
+    type: str = ""
+    avail: int = 0
+    total: int = 0
+    used: int = 0

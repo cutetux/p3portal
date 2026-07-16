@@ -18,6 +18,7 @@ import { useMyNodeAssignments } from '../../features/node_assignments/hooks/useN
 import { getNodes } from '../../api/cluster'
 import ComputeNetworkTab from '../../components/computenodes/ComputeNetworkTab'
 import SdnManagementTab from '../../components/sdn/SdnManagementTab'
+import IpamPanel from '../../components/ipam/IpamPanel'
 import Watermark from '../../components/common/Watermark'
 import HelpButton from '../../features/help/components/HelpButton'
 
@@ -38,15 +39,20 @@ export default function NetworkPage() {
 
   const canSeeNode = isAdmin || hasPerm('manage_networks') || networkScopeNodes.length > 0
   const canSeeSdn  = isAdmin || hasPerm('manage_sdn')
+  // PROJ-42: IPAM pool management – Core is admin-only (require_admin_or with the
+  // Plus-only manage_ipam permission → effectively admin until Plus grants it).
+  const canSeeIpam = isAdmin || hasPerm('manage_ipam')
 
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedArea = searchParams.get('area')
-  // Default area: node-interfaces if allowed, else sdn.
+  // Default area: node-interfaces if allowed, else sdn, else ipam.
   const area = requestedArea === 'sdn'
     ? 'sdn'
     : requestedArea === 'node-interfaces'
       ? 'node-interfaces'
-      : (canSeeNode ? 'node-interfaces' : 'sdn')
+      : requestedArea === 'ipam'
+        ? 'ipam'
+        : (canSeeNode ? 'node-interfaces' : canSeeSdn ? 'sdn' : 'ipam')
 
   function setArea(next) {
     setSearchParams(prev => {
@@ -119,7 +125,7 @@ export default function NetworkPage() {
 
       <main className="flex-1 overflow-y-auto px-6 py-6 bg-transparent">
         {/* Area tabs */}
-        <div className="flex items-center border-b border-gray-200 dark:border-zinc-700 mb-5 overflow-x-auto">
+        <div className="flex items-center border-b border-gray-200 dark:border-zinc-700 mb-5 overflow-x-auto overflow-y-hidden">
           {canSeeNode && (
             <button onClick={() => setArea('node-interfaces')} className={tabCls(area === 'node-interfaces')}>
               Node-Interfaces
@@ -128,6 +134,11 @@ export default function NetworkPage() {
           {canSeeSdn && (
             <button onClick={() => setArea('sdn')} className={tabCls(area === 'sdn')}>
               SDN (Cluster)
+            </button>
+          )}
+          {canSeeIpam && (
+            <button onClick={() => setArea('ipam')} className={tabCls(area === 'ipam')}>
+              IPAM
             </button>
           )}
         </div>
@@ -191,6 +202,14 @@ export default function NetworkPage() {
         {area === 'sdn' && !canSeeSdn && (
           <p className="text-sm text-gray-400 dark:text-zinc-500 py-8 text-center">
             Kein Zugriff auf die SDN-Verwaltung.
+          </p>
+        )}
+
+        {/* IPAM area (PROJ-42: Core pool management + Phase-2 Plus sub-tabs) */}
+        {area === 'ipam' && canSeeIpam && <IpamPanel />}
+        {area === 'ipam' && !canSeeIpam && (
+          <p className="text-sm text-gray-400 dark:text-zinc-500 py-8 text-center">
+            Kein Zugriff auf die IPAM-Verwaltung.
           </p>
         )}
 

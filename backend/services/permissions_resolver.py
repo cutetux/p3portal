@@ -93,7 +93,11 @@ async def resolve_user_permissions(
 
     Globaler Admin → Vollzugriff (["view","start","stop","reboot","snapshot","configure","delete","clone"]).
     """
-    ALL_ACTIONS = {"view", "start", "stop", "reboot", "snapshot", "configure", "delete", "clone"}
+    # PROJ-102: migrate/template neu (admin bekommt sie über den Vollzugriff).
+    ALL_ACTIONS = {
+        "view", "start", "stop", "reboot", "snapshot", "configure", "delete",
+        "clone", "migrate", "template",
+    }
 
     async with get_db() as db:
         if await _is_admin(db, user_id):
@@ -266,7 +270,8 @@ async def can_user_execute_playbook(user_id: int, playbook_name: str) -> bool:
 # ── Bulk-Visibility (Dashboard, PROJ-30) ─────────────────────────────────────
 
 ALL_ACTIONS: frozenset[str] = frozenset(
-    {"view", "start", "stop", "reboot", "snapshot", "configure", "delete", "clone"}
+    {"view", "start", "stop", "reboot", "snapshot", "configure", "delete",
+     "clone", "migrate", "template"}
 )
 
 

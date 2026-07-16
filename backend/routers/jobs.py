@@ -130,8 +130,9 @@ async def start_job(
                         allowed_categories = ["vm_deployment", "lxc_deployment"]
 
                     if meta.category in allowed_categories:
-                        # Owner-Limit-Pre-Check
-                        from backend.core.plus_protocol import plus_behavior
+                        # Owner-Limit-Pre-Check (nutzt das global importierte
+                        # plus_behavior; ein lokaler Re-Import würde die Variable
+                        # funktionsweit lokal machen → UnboundLocalError, PROJ-42)
                         from backend.features.owners.service import count_active_ownerships
                         from backend.services.local_auth import get_user_by_username
                         actor = await get_user_by_username(current_user.username)
@@ -188,6 +189,14 @@ async def start_job(
 
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+
+    # PROJ-42 Phase 2: IPAM-Reservierung der gewählten statischen IP (Plus-Hook,
+    # nur bei aktivem IPAM). Läuft VOR dem Job-Insert – eine IP-Kollision wirft
+    # 409 (Deploy startet gar nicht erst, die IP wird nicht still umgeschrieben).
+    # Core-Default = no-op.
+    await plus_behavior.on_playbook_job_started_ipam(
+        job_id, body.playbook, body.params, current_user.username
+    )
 
     # Strip sensitive params (ssh_key type) before DB storage – AC10
     sensitive = get_sensitive_param_ids(body.playbook)

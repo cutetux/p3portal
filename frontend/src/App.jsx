@@ -19,6 +19,7 @@ const StacksListPage = PlusComponents.StacksListPage
 const StackEditorPage = PlusComponents.StackEditorPage
 const StackDetailPage = PlusComponents.StackDetailPage
 import ChangePasswordPage from './pages/ChangePasswordPage'
+import Setup2faPage from './pages/Setup2faPage'
 import PermissionsPage from './pages/PermissionsPage'
 import NotificationsHubPage from './features/notifications/Page'
 import VmDetailPage from './pages/VmDetailPage'
@@ -32,6 +33,7 @@ import ComputeNodesPage from './pages/v2/ComputeNodesPage'
 import NodeDetailPage from './pages/v2/NodeDetailPage'
 import NetworkPage from './pages/v2/NetworkPage'
 import FirewallPage from './pages/v2/FirewallPage'
+import HaPage from './pages/v2/HaPage'
 import ProvisioningPage from './pages/v2/ProvisioningPage'
 import AutomationPage from './pages/v2/AutomationPage'
 import ImageFactoryPage from './pages/v2/ImageFactoryPage'
@@ -75,12 +77,14 @@ function AppRoutes() {
       <Route path="/announcements" element={<ProtectedLayout><NotificationsHubPage /></ProtectedLayout>} />
       <Route path="/vm/:node/:type/:vmid" element={<ProtectedLayout><VmDetailPage /></ProtectedLayout>} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
+      <Route path="/setup-2fa" element={<ProtectedRoute><Setup2faPage /></ProtectedRoute>} />
 
       {/* ── V2 Routes ────────────────────────────────────────────────────── */}
       <Route path="/compute" element={<ProtectedLayout><ComputeNodesPage /></ProtectedLayout>} />
       <Route path="/compute/:node" element={<ProtectedLayout><NodeDetailPage /></ProtectedLayout>} />
       <Route path="/network" element={<ProtectedLayout><NetworkPage /></ProtectedLayout>} />
       <Route path="/firewall" element={<ProtectedLayout><FirewallPage /></ProtectedLayout>} />
+      <Route path="/ha" element={<ProtectedLayout><HaPage /></ProtectedLayout>} />
       <Route path="/provisioning" element={<ProtectedLayout><ProvisioningPage /></ProtectedLayout>} />
       <Route path="/automation" element={<ProtectedLayout><AutomationPage /></ProtectedLayout>} />
       <Route path="/image-factory" element={<ProtectedLayout><ImageFactoryPage /></ProtectedLayout>} />

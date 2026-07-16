@@ -23,8 +23,15 @@ from backend.models.profile import (
     SshKeyOut,
     SshKeyRequest,
     SshKeyResponse,
+    TwoFactorActivateResponse,
+    TwoFactorDisableRequest,
+    TwoFactorRecoveryResponse,
+    TwoFactorSetupResponse,
+    TwoFactorStatusResponse,
+    TwoFactorVerifyRequest,
 )
-from backend.services.local_auth import change_own_password, get_user_by_username
+from backend.services.audit_service import write_audit_log
+from backend.services.local_auth import change_own_password, get_user_by_username, verify_password
 from backend.services.profile_service import (
     add_ssh_key_entry,
     delete_ssh_job_key,
@@ -81,10 +88,147 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
         auth_type=current_user.auth_type,
         role=current_user.role,
         must_change_pw=current_user.must_change_pw,
+        must_setup_2fa=current_user.must_setup_2fa,
         last_login_at=last_login_at,
         last_login_ip=last_login_ip,
         groups=groups,
     )
+
+
+# ── PROJ-106: Zwei-Faktor-Authentifizierung (Selbstbedienung) ─────────────────
+
+def _require_local(current_user: CurrentUser) -> None:
+    if current_user.auth_type != "local":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="2FA ist nur für Portal-Accounts verfügbar",
+        )
+
+
+async def _resolve_user_id(current_user: CurrentUser) -> int:
+    if current_user.user_id is not None:
+        return current_user.user_id
+    user = await get_user_by_username(current_user.username)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nutzer nicht gefunden")
+    return user["id"]
+
+
+@router.get("/2fa", response_model=TwoFactorStatusResponse)
+async def get_2fa_status(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TwoFactorStatusResponse:
+    _require_local(current_user)
+    from backend.services.two_factor_service import get_state
+    uid = await _resolve_user_id(current_user)
+    return TwoFactorStatusResponse(**await get_state(uid))
+
+
+@router.post("/2fa/setup", response_model=TwoFactorSetupResponse)
+async def setup_2fa(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TwoFactorSetupResponse:
+    _require_local(current_user)
+    from backend.services.two_factor_service import start_enrollment
+    uid = await _resolve_user_id(current_user)
+    data = await start_enrollment(uid, current_user.username)
+    return TwoFactorSetupResponse(
+        secret=data["secret"], otpauth_uri=data["otpauth_uri"], qr_svg=data["qr_svg"]
+    )
+
+
+@router.post("/2fa/verify", response_model=TwoFactorActivateResponse)
+async def verify_2fa(
+    body: TwoFactorVerifyRequest,
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TwoFactorActivateResponse:
+    _require_local(current_user)
+    from backend.services.two_factor_service import activate
+    uid = await _resolve_user_id(current_user)
+    codes = await activate(uid, body.code)
+    if codes is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code ungültig")
+
+    client_ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+    await write_audit_log("2fa_enabled", current_user.username, "local", client_ip, ua)
+
+    # Frisches Token ohne must_setup_2fa (löst das Zwangs-Enrollment-Gate) +
+    # alte Session invalidieren (analog Passwort-Änderung).
+    from datetime import timedelta
+    from backend.services.session_service import create_session
+    if current_user.jti:
+        await revoke_session_by_jti(current_user.jti)
+    new_jti = str(uuid.uuid4())
+    expire_str = (datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)).isoformat()
+    await create_session(current_user.username, new_jti, expire_str, client_ip, ua)
+    token = create_access_token(
+        current_user.username,
+        auth_type="local",
+        role=current_user.role,
+        jti=new_jti,
+        portal_permissions=current_user.portal_permissions,
+        must_setup_2fa=False,
+    )
+    return TwoFactorActivateResponse(recovery_codes=codes, access_token=token)
+
+
+@router.post("/2fa/disable", status_code=204)
+async def disable_2fa(
+    body: TwoFactorDisableRequest,
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    _require_local(current_user)
+    from backend.services.two_factor_service import (
+        disable,
+        is_required_for_role,
+        verify_totp_for_user,
+    )
+    uid = await _resolve_user_id(current_user)
+
+    # Enforce-Pflicht: Selbst-Deaktivierung gesperrt.
+    if await is_required_for_role(current_user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="2FA ist für Ihre Rolle verpflichtend und kann nicht deaktiviert werden",
+        )
+
+    # Bestätigung per aktuellem TOTP-Code ODER Passwort.
+    confirmed = False
+    if body.code and await verify_totp_for_user(uid, body.code):
+        confirmed = True
+    elif body.password:
+        user = await get_user_by_username(current_user.username)
+        if user and verify_password(body.password, user["password_hash"]):
+            confirmed = True
+    if not confirmed:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bestätigung fehlgeschlagen")
+
+    await disable(uid)
+    client_ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+    await write_audit_log("2fa_disabled", current_user.username, "local", client_ip, ua)
+    return Response(status_code=204)
+
+
+@router.post("/2fa/recovery/regenerate", response_model=TwoFactorRecoveryResponse)
+async def regenerate_2fa_recovery(
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TwoFactorRecoveryResponse:
+    """BUG-106-3: Erzeugt frische Recovery-Codes (invalidiert die alten)."""
+    _require_local(current_user)
+    from backend.services.two_factor_service import regenerate_recovery_codes
+    uid = await _resolve_user_id(current_user)
+    codes = await regenerate_recovery_codes(uid)
+    if codes is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="2FA ist nicht aktiv")
+    client_ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+    await write_audit_log("2fa_recovery_regenerated", current_user.username, "local", client_ip, ua)
+    return TwoFactorRecoveryResponse(recovery_codes=codes)
 
 
 # ── Password change ───────────────────────────────────────────────────────────

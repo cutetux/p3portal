@@ -50,9 +50,12 @@ def _no_stack_managed():
     global session isn't initialised. Tests that exercise the 409 stack-block or
     the dependency-impact warning re-patch these targets inside their own
     ``with`` block (the inner patch wins).
+
+    PROJ-42 Phase 2: the IPAM release-impact guard also hits the DB → default no-op.
     """
     with patch("backend.routers.vms._assert_not_stack_managed", new=AsyncMock(return_value=None)), \
-         patch("backend.routers.vms._dependency_impact", new=AsyncMock(return_value=None)):
+         patch("backend.routers.vms._dependency_impact", new=AsyncMock(return_value=None)), \
+         patch("backend.routers.vms._ipam_release_impact", new=AsyncMock(return_value=None)):
         yield
 
 
@@ -866,3 +869,232 @@ async def test_remove_disk_missing_confirm_422(client: AsyncClient, operator_loc
     with _PATCH_VM_ACCESS_OPERATOR():
         resp = await client.delete("/api/vms/100/disks/scsi1", headers=operator_local_headers)
     assert resp.status_code == 422  # required confirm query param missing
+
+
+# ── PROJ-102: VM/LXC Lifecycle (Clone / Migrate / Convert-to-Template) ─────────
+
+from backend.models.jobs import JobResponse as _JobResponse  # noqa: E402
+
+
+def _fake_job(action: str = "clone") -> _JobResponse:
+    return _JobResponse(
+        id="job-123", type=f"vm_{action}", playbook=f"{action}:100",
+        status="pending", created_at="2026-07-09T00:00:00+00:00",
+        username="localop", params={},
+    )
+
+
+def _patch_create_job(action: str = "clone"):
+    return patch(
+        "backend.routers.vms._create_lifecycle_job",
+        new=AsyncMock(return_value=_fake_job(action)),
+    )
+
+
+class _FakeNodeRow:
+    def __init__(self, cluster_nodes):
+        self.id = 1
+        self.cluster_nodes = cluster_nodes
+
+
+# ── Clone ─────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_clone_full_success(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_next_vmid", new=AsyncMock(return_value=205)),
+        _patch_create_job("clone"),
+    ):
+        resp = await client.post(
+            "/api/vms/100/clone",
+            json={"name": "clone-a", "target_storage": "local-lvm", "full": True},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 202
+    assert resp.json()["type"] == "vm_clone"
+
+
+@pytest.mark.asyncio
+async def test_clone_linked_from_non_template_422(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_config", new=AsyncMock(return_value={"name": "x"})),
+    ):
+        resp = await client.post(
+            "/api/vms/100/clone",
+            json={"name": "clone-a", "full": False},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_clone_linked_from_template_ok(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_config", new=AsyncMock(return_value={"template": 1})),
+        patch("backend.routers.vms.proxmox_client.get_next_vmid", new=AsyncMock(return_value=205)),
+        _patch_create_job("clone"),
+    ):
+        resp = await client.post(
+            "/api/vms/100/clone",
+            json={"name": "clone-a", "full": False},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 202
+
+
+@pytest.mark.asyncio
+async def test_clone_explicit_vmid_conflict_409(client: AsyncClient, operator_local_headers: dict):
+    # get_next_vmid(min=id,max=id) returns a different id → taken.
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_next_vmid", new=AsyncMock(return_value=999)),
+    ):
+        resp = await client.post(
+            "/api/vms/100/clone",
+            json={"name": "clone-a", "newid": 205},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_clone_viewer_forbidden(client: AsyncClient, viewer_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.get_user_by_username", new=AsyncMock(return_value=None)),
+    ):
+        resp = await client.post(
+            "/api/vms/100/clone",
+            json={"name": "clone-a"},
+            headers=viewer_local_headers,
+        )
+    assert resp.status_code == 403
+
+
+# ── Migrate ───────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_migrate_success(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_status_current", new=AsyncMock(return_value={"status": "stopped"})),
+        patch("backend.services.nodes_service.get_node_for_proxmox_name", new=AsyncMock(return_value=_FakeNodeRow(["pve1", "pve2"]))),
+        _patch_create_job("migrate"),
+    ):
+        resp = await client.post(
+            "/api/vms/100/migrate",
+            json={"target_node": "pve2"},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 202
+    assert resp.json()["type"] == "vm_migrate"
+
+
+@pytest.mark.asyncio
+async def test_migrate_running_guest_409(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_status_current", new=AsyncMock(return_value={"status": "running"})),
+    ):
+        resp = await client.post(
+            "/api/vms/100/migrate",
+            json={"target_node": "pve2"},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_migrate_invalid_target_422(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_status_current", new=AsyncMock(return_value={"status": "stopped"})),
+        patch("backend.services.nodes_service.get_node_for_proxmox_name", new=AsyncMock(return_value=_FakeNodeRow(["pve1"]))),
+    ):
+        resp = await client.post(
+            "/api/vms/100/migrate",
+            json={"target_node": "pve9"},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_migrate_stack_managed_409(client: AsyncClient, operator_local_headers: dict):
+    from fastapi import HTTPException as _HTTPException
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch(
+            "backend.routers.vms._assert_not_stack_managed",
+            new=AsyncMock(side_effect=_HTTPException(status_code=409, detail={"error": "vm_managed_by_stack"})),
+        ),
+    ):
+        resp = await client.post(
+            "/api/vms/100/migrate",
+            json={"target_node": "pve2"},
+            headers=operator_local_headers,
+        )
+    assert resp.status_code == 409
+
+
+# ── Convert-to-Template ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_convert_template_success(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_status_current", new=AsyncMock(return_value={"status": "stopped"})),
+        _patch_create_job("template"),
+    ):
+        resp = await client.post("/api/vms/100/convert-template", headers=operator_local_headers)
+    assert resp.status_code == 202
+    assert resp.json()["type"] == "vm_template"
+
+
+@pytest.mark.asyncio
+async def test_convert_template_running_409(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_status_current", new=AsyncMock(return_value={"status": "running"})),
+    ):
+        resp = await client.post("/api/vms/100/convert-template", headers=operator_local_headers)
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_convert_already_template_409(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.routers.vms.proxmox_client.get_vm_status_current", new=AsyncMock(return_value={"status": "stopped", "template": 1})),
+    ):
+        resp = await client.post("/api/vms/100/convert-template", headers=operator_local_headers)
+    assert resp.status_code == 409
+
+
+# ── Migration targets ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_migration_targets_multi_node(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.services.nodes_service.get_node_for_proxmox_name", new=AsyncMock(return_value=_FakeNodeRow(["pve1", "pve2", "pve3"]))),
+    ):
+        resp = await client.get("/api/vms/100/migration-targets", headers=operator_local_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["current_node"] == "pve1"
+    assert body["targets"] == ["pve2", "pve3"]
+
+
+@pytest.mark.asyncio
+async def test_migration_targets_single_node_empty(client: AsyncClient, operator_local_headers: dict):
+    with (
+        _PATCH_VM_ACCESS_OPERATOR(),
+        patch("backend.services.nodes_service.get_node_for_proxmox_name", new=AsyncMock(return_value=_FakeNodeRow(["pve1"]))),
+    ):
+        resp = await client.get("/api/vms/100/migration-targets", headers=operator_local_headers)
+    assert resp.status_code == 200
+    assert resp.json()["targets"] == []

@@ -77,7 +77,7 @@ function PlaybookVmIdField({ param, value, onChange, error }) {
 
 // ── Haupt-Dispatcher ──────────────────────────────────────────────────────────
 
-export default function PlaybookFormField({ param, value, onChange, error, formValues }) {
+export default function PlaybookFormField({ param, value, onChange, error, formValues, params }) {
   if (param.type === 'ssh_key') {
     return <SshKeyField param={param} value={value} onChange={onChange} error={error} />
   }
@@ -113,7 +113,16 @@ export default function PlaybookFormField({ param, value, onChange, error, formV
     )
   }
   if (param.type === 'ip_config') {
-    return <IpConfigField param={param} value={value} onChange={onChange} error={error} />
+    return (
+      <IpConfigField
+        param={param}
+        value={value}
+        onChange={onChange}
+        error={error}
+        formValues={formValues}
+        params={params}
+      />
+    )
   }
   if (param.id === 'vm_id' && param.type === 'integer') {
     return <PlaybookVmIdField param={param} value={value} onChange={onChange} error={error} />

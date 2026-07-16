@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { completeSetup } from '../../api/setup'
 import { uploadLicense, startTrial } from '../../api/license'
+import { persistToken } from '../../api/tokenStorage'
 
 function Row({ label, value }) {
   return (
@@ -33,9 +34,10 @@ export default function WizardStep7Complete({ data, onBack, onComplete }) {
     try {
       const result = await completeSetup()
 
-      // Auto-Login: JWT direkt aus Setup-Complete-Response (Option A)
+      // Auto-Login: JWT direkt aus Setup-Complete-Response (Option A).
+      // PROJ-109: Setup-Auto-Login ohne "remember" → sessionStorage.
       if (result?.access_token) {
-        sessionStorage.setItem('token', result.access_token)
+        persistToken(result.access_token, false)
       }
 
       // Optionaler Lizenz-Upload nach JWT-Erhalt (Upload-EP ist auth-pflichtig)

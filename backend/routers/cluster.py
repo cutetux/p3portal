@@ -112,6 +112,19 @@ async def _alert_vms_callback(node_id: int, _endpoint: str, data: list) -> None:
         )
     except Exception:
         pass
+    # PROJ-42 Phase 2: IPAM-Allocations verschwundener VMs als „orphaned" markieren
+    # (bzw. wieder aufgetauchte reaktivieren). Nur nach erfolgreichem Refresh.
+    try:
+        ipam_visible_vmids: set[int] = {
+            int(r.get("vmid", -1))
+            for r in (data or [])
+            if r.get("vmid") is not None
+        }
+        await plus_behavior.on_cluster_refresh_vanished_resources_ipam(
+            ipam_visible_vmids, node_id
+        )
+    except Exception:
+        pass
 
 
 def _cluster_http_exc(exc: httpx.HTTPStatusError, auth: ProxmoxAuth) -> HTTPException:
@@ -512,6 +525,22 @@ async def fetch_visible_vm_resources(
     if with_ip:
         await _lookup_vm_ips(vms, vm_client_map)
     return await apply_vm_rbac_filter(current_user, vms)
+
+
+async def collect_used_ipv4s(current_user: CurrentUser, force: bool = False) -> set[str]:
+    """PROJ-42 (Core Simple-IPAM): alle aktuell laufend benutzten IPv4-Adressen
+    über die Proxmox-Installationen des Nutzers — **unfiltered** (bewusst NICHT
+    RBAC-gefiltert, sonst würde der Free-IP-Vorschlag fremde, dem Nutzer nicht
+    sichtbare Belegungen übersehen). Best-effort: nur *laufende* Gäste (Guest-
+    Agent / LXC-Interfaces, dieselbe Quelle wie das Dashboard); gestoppte
+    statische IPs und Nicht-Proxmox-Geräte sind unsichtbar (dokumentierte Grenze,
+    die Phase 2 mit dem Allocation-Store schließt).
+    """
+    vms, vm_client_map = await _collect_vm_resources(
+        current_user, force=force, raise_on_empty=False
+    )
+    await _lookup_vm_ips(vms, vm_client_map)
+    return {vm.ip for vm in vms if vm.ip}
 
 
 @router.get("/vms", response_model=list[VmInfo])
@@ -1552,6 +1581,15 @@ async def get_node_vm_options(
         and v.get("vnet")
         and str(v.get("state", "")).lower() != "deleted"
     })
+    # PROJ-42 Phase 2: backend-enforced Netz-Sichtbarkeits-Filter (Plus). Greift für
+    # ALLE Konsumenten (Playbook + Stacks) ohne Frontend-Änderung; Core-Default =
+    # Identität (kein Bruch). Filtert nur bei strict_network_visibility + Admin sieht alles.
+    try:
+        bridges, vnet_names = await plus_behavior.filter_visible_networks(
+            current_user, bridges, vnet_names, node
+        )
+    except Exception:
+        pass
     return {
         "bridges": bridges,
         "vnets": vnet_names,             # PROJ-79/80: auswählbare SDN-VNets

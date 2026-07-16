@@ -14,12 +14,15 @@
 - **Cluster dashboard** — live overview of nodes, VMs, LXC containers, CPU/RAM/storage
 - **Automation** — parametrised Ansible playbooks with live logs plus in-guest runs via dynamic inventory; Packer template builds from `.pkr.hcl`
 - **Networking & firewall** — Linux bridges/VLANs, SDN (zones / VNets / subnets), datacenter / node / VM firewall rules, security groups, IP sets
-- **VM/LXC lifecycle** — detail pages, power & snapshots, disk attach/resize, backup-job management, ISO & LXC template management (Image Factory)
+- **IP address management (IPAM)** — IP pools per network with a best-effort free-IP suggestion at deploy time
+- **VM/LXC lifecycle** — detail pages, power & snapshots, clone / migrate / convert-to-template, disk attach/resize, backup-job management, ISO & LXC template management (Image Factory)
+- **High availability** — manage Proxmox HA rules/groups and resources on clustered installations
 - **Access control** — fine-grained per-VM/LXC RBAC with custom role presets, resource ownership (incl. adopting externally-created VMs), teams and granular admin delegation; permission-aware UI throughout
+- **Security & access** — local users, two-factor authentication (TOTP), installable PWA desktop app
 - **Job history & API** — every run logged with full output, filterable and searchable; scoped API keys, external jobs API, webhooks
 - **Notifications, theming & i18n** — notification hub, built-in themes, DE/EN
 
-> The **Plus** edition adds declarative **Stacks** (VMs / LXC / networks / firewall as code via OpenTofu), an interactive **topology** view, **scheduled jobs & auto-snapshots**, **config snapshots**, resource **pools with quotas**, a **4-eyes approval** workflow, **multi-cluster** dashboards, **Git-sync**, alert presets (SMTP / webhook), a theme editor, and **visual editors** for Packer & Ansible. Full breakdown: [Core vs. Plus](#core-vs-plus).
+> The **Plus** edition adds declarative **Stacks** (VMs / LXC / networks / firewall as code via OpenTofu), an interactive **topology** view, **scheduled jobs & auto-snapshots**, **config snapshots**, resource **pools with quotas**, a **4-eyes approval** workflow, **multi-cluster** dashboards, **Git-sync**, **template replication** across nodes, a stateful **IPAM** (persistent allocations & network grants), alert presets (SMTP / webhook), a theme editor, and **visual editors** for Packer & Ansible. Full breakdown: [Core vs. Plus](#core-vs-plus).
 
 Everything needed to run (Python, Ansible, Packer, the React frontend — plus OpenTofu in the Plus image) is bundled. Nothing needs to be installed on the host.
 
@@ -153,7 +156,7 @@ wget https://raw.githubusercontent.com/P3Portal-org/p3portal/main/p3portal-podma
 sudo bash p3portal-podman-install.sh
 ```
 
-Swap `main` for a released tag (e.g. `v1.98.2-beta`) in the URL for a
+Swap `main` for a released tag (e.g. `v1.105.0-beta`) in the URL for a
 reproducible install.
 
 ### 5 — Setup wizard
@@ -327,6 +330,10 @@ The Plus image embeds the same Core code plus the proprietary `backend/plus/` / 
 | SDN management (zones / VNets / subnets) | ✓ | ✓ | ✓ |
 | Proxmox firewall (datacenter / node / VM rules, security groups, IP sets) | ✓ | ✓ | ✓ |
 | VM disk management (attach / resize / remove) | ✓ | ✓ | ✓ |
+| VM / LXC clone, migrate & convert-to-template | ✓ | ✓ | ✓ |
+| High-availability management (HA rules / groups & resources) | ✓ | ✓ | ✓ |
+| IP pools & free-IP suggestion (Simple-IPAM) | ✓ | ✓ | ✓ |
+| Two-factor authentication (TOTP) | ✓ | ✓ | ✓ |
 | 30-day Plus trial (one-time, unlocks all Plus features) | ✓ | ✓ | ✓ |
 | Scheduled jobs | — | ✓ up to 3 | ✓ |
 | User accounts | ✓ up to 6 | ✓ up to 6 | ✓ |
@@ -349,6 +356,8 @@ The Plus image embeds the same Core code plus the proprietary `backend/plus/` / 
 | VM dependencies & action-impact warnings | — | — | ✓ |
 | Packer visual editor (form-driven build definitions) | — | — | ✓ |
 | Ansible visual editor (schema-driven task builder) | — | — | ✓ |
+| Template replication across nodes (storage-aware) | — | — | ✓ |
+| IPAM — persistent allocations, reservation lifecycle, network grants & Stacks IP assignment | — | — | ✓ |
 
 The Plus image without a key can be unlocked once for a **30-day trial** (System Settings → Licence or the Setup Wizard); afterwards it falls back to Core. Upload a licence key in **System Settings → Licence** or through the Setup Wizard for a permanent unlock. Plus sales are currently inactive — see [COMMERCIAL.md](COMMERCIAL.md).
 

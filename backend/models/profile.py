@@ -96,9 +96,49 @@ class ProfileResponse(BaseModel):
     auth_type: str
     role: str
     must_change_pw: bool
+    must_setup_2fa: bool = False  # PROJ-106: Zwangs-Enrollment offen?
     last_login_at: str | None
     last_login_ip: str | None
     groups: list[MyGroupEntry] = []
+
+
+# ── PROJ-106: Zwei-Faktor-Authentifizierung ───────────────────────────────────
+
+class TwoFactorStatusResponse(BaseModel):
+    enabled: bool
+    pending: bool
+    enforced: bool
+
+
+class TwoFactorSetupResponse(BaseModel):
+    secret: str          # Base32-Klartext (manueller Schlüssel)
+    otpauth_uri: str
+    qr_svg: str          # eigenständiges SVG-Dokument
+
+
+class TwoFactorVerifyRequest(BaseModel):
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Code darf nicht leer sein")
+        return v
+
+
+class TwoFactorActivateResponse(BaseModel):
+    recovery_codes: list[str]
+    access_token: str    # frisches Token ohne must_setup_2fa
+
+
+class TwoFactorDisableRequest(BaseModel):
+    code: str | None = None       # aktueller TOTP-/Recovery-Code
+    password: str | None = None   # ODER Passwort-Bestätigung
+
+
+class TwoFactorRecoveryResponse(BaseModel):
+    recovery_codes: list[str]
 
 
 class SshJobKeyStatus(BaseModel):

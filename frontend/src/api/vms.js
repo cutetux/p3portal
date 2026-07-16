@@ -139,3 +139,40 @@ export async function removeDisk(vmid, disk, confirm, node) {
   const { data } = await api.delete(`/api/vms/${vmid}/disks/${encodeURIComponent(disk)}?${params.toString()}`)
   return data
 }
+
+// ── PROJ-102: VM/LXC Lifecycle (Clone / Migrate / Convert-to-Template) ─────────
+// Alle drei Aktionen laufen als Job (202 → JobResponse) mit WebSocket-Live-Log;
+// der Aufrufer navigiert danach zu /events/<job.id>.
+
+// Storages on a node that can hold LXC rootfs volumes (LXC-Clone-Ziel-Dropdown).
+export async function listRootdirStorages(node) {
+  const { data } = await api.get(`/api/nodes/${encodeURIComponent(node)}/rootdir-storages`)
+  return data
+}
+
+// Ziel-Nodes für die Migration = andere cluster_nodes derselben Installation.
+// Leere `targets` → Single-Node → Migrate deaktiviert.
+export async function getMigrationTargets(vmid, node) {
+  const { data } = await api.get(`/api/vms/${vmid}/migration-targets${nodeQuery(node)}`)
+  return data
+}
+
+// Clone auf dieselbe Node. body: { name, target_storage?, newid?, full, set_owner }.
+export async function cloneVm(vmid, body, node) {
+  const { data } = await api.post(`/api/vms/${vmid}/clone${nodeQuery(node)}`, body)
+  return data
+}
+
+// Offline-Migration auf eine andere Node. body: { target_node, target_storage? }.
+// PROJ-103: optionales confirm überspringt die HA-Awareness-Warnung (409 ha_managed).
+export async function migrateVm(vmid, body, node, opts = {}) {
+  const { data } = await api.post(`/api/vms/${vmid}/migrate${powerQuery(node, opts)}`, body)
+  return data
+}
+
+// Gestoppten Gast zu einem Template konvertieren.
+// PROJ-103: optionales confirm überspringt die HA-Awareness-Warnung (409 ha_managed).
+export async function convertToTemplate(vmid, node, opts = {}) {
+  const { data } = await api.post(`/api/vms/${vmid}/convert-template${powerQuery(node, opts)}`)
+  return data
+}

@@ -260,6 +260,9 @@ _NEW_SCOPES = {
     "ansible_inventory:read": False, "ansible_inventory:write": False,
     "packer_editor:read": True, "packer_editor:write": True,
     "ansible_editor:read": True, "ansible_editor:write": True,
+    # PROJ-42 Phase 2: internes Plus-IPAM (plus_only)
+    "ipam_allocations:read": True, "ipam_allocations:write": True,
+    "ipam_grants:read": True, "ipam_grants:write": True,
 }
 
 

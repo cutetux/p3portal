@@ -9,6 +9,7 @@ import { getVmDetail, getVmBackups, getSnapshots, getVmGuestInfo, getLxcInterfac
 import PinIcon from '../components/common/PinIcon'
 import { usePinToggle } from '../features/sidebar_pins/hooks/usePinToggle'
 import VmDetailHeader from '../components/vms/VmDetailHeader'
+import VmLifecycleActions from '../components/vms/VmLifecycleActions'
 import VmResourceBars from '../components/vms/VmResourceBars'
 import VmConfigSection from '../components/vms/VmConfigSection'
 import VmSnapshotSection from '../components/vms/VmSnapshotSection'
@@ -111,6 +112,10 @@ export default function VmDetailPage() {
   const hasDependencies = useCapability('vm_dependencies')
   const VmDependencySection = PlusComponents.VmDependencySection
   const canManageDependencies = (role === 'admin') || (portalPermissions ?? []).includes('manage_dependencies')
+  // PROJ-42 Phase 2: IPAM-Allocation (Plus, read-only). Karte rendert nur, wenn
+  // eine Allocation für diese VM existiert.
+  const hasIpamPlus = useCapability('ipam_plus')
+  const IpamAllocationCard = PlusComponents.IpamAllocationCard
   const [activeTab, setActiveTab] = useState('overview')
 
   const pinRoute = `/vm/${node}/${type}/${vmid}`
@@ -364,6 +369,16 @@ export default function VmDetailPage() {
                     />
                   </Suspense>
                 )}
+
+                {/* PROJ-42 Phase 2: IPAM-Allocation (Plus, read-only) */}
+                {hasIpamPlus && IpamAllocationCard && detail.portal_node_id != null && (
+                  <Suspense fallback={null}>
+                    <IpamAllocationCard portalNodeId={detail.portal_node_id} vmid={Number(vmid)} />
+                  </Suspense>
+                )}
+
+                {/* PROJ-102: Lebenszyklus-Aktionen (Clone/Migrate/Convert) */}
+                <VmLifecycleActions detail={detail} isOperator={isOperator} />
 
                 {/* Resource bars */}
                 <VmResourceBars detail={detail} />
