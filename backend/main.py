@@ -124,7 +124,7 @@ _openapi_url = "/api/openapi.json" if settings.expose_api_docs else None
 
 app = FastAPI(
     title="P3 Portal",
-    version="v1.105.3-beta",
+    version="v1.105.4-beta",
     docs_url=_docs_url,
     redoc_url=None,
     openapi_url=_openapi_url,

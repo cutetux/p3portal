@@ -8,8 +8,8 @@ Reference of which API endpoints use which Proxmox token.
 
 | Token | Proxmox role | Typical permissions |
 |---|---|---|
-| `viewer` | PVEViewer | VM.Audit, Sys.Audit – **no** Datastore.Audit |
-| `operator` | PVEOperator | VM.Power, VM.Config.*, VM.Audit, Sys.Audit – **no** Datastore.Audit |
+| `viewer` | PortalViewer | VM.Audit, Sys.Audit, Pool.Audit, **Datastore.Audit** (read-only – enables storage/backup listing) |
+| `operator` | PortalOperator | VM.Power, VM.Config.*, VM.Audit, Sys.Audit – **no** Datastore.Audit |
 | `admin` | PVEAdmin / PVEDatastoreAdmin | All including Datastore.Audit, Datastore.Allocate |
 | `packer` | Custom role | VM.Allocate, VM.Clone, Datastore.AllocateTemplate, VM.Config.Disk, **Sys.AccessNetwork** (required by PVE ≥ 8 for `download-url`) |
 
@@ -77,19 +77,30 @@ For ISO write operations the code resolves the token as **packer → admin** (vi
 
 Proxmox's `POST /storage/{storage}/download-url` endpoint performs an outbound HTTP fetch on behalf of the caller. From PVE 8 onwards Proxmox additionally checks `Sys.AccessNetwork` on `/nodes/{node}` (or any ancestor path) before allowing the network access. A token that has `Datastore.AllocateTemplate` but lacks `Sys.AccessNetwork` returns a `403 Permission check failed` with no detail field. Add `Sys.AccessNetwork` to your Packer role.
 
-### Datastore.Audit missing on viewer & operator
+### Datastore.Audit and storage listing
 
-`GET /api2/json/nodes/{node}/storage` requires `Datastore.Audit`. PVEViewer and PVEOperator do **not** have this permission by default. When the permission is missing, Proxmox returns **200 with an empty list** (not a 403).
+`GET /api2/json/nodes/{node}/storage` requires `Datastore.Audit`. When the querying
+token lacks it, Proxmox returns **200 with an empty list** (not a 403) – so a missing
+permission looks identical to "no storages configured".
 
-**Affected:** `GET /cluster/lxc-template-storages`
-**Workaround in the code:** admin → operator → viewer fallback chain.
+The P3 **PortalViewer** role therefore **includes `Datastore.Audit`** (read-only). The
+setup wizard and the *Add/Edit node* modal generate the `pveum` commands accordingly,
+so every configured viewer token can list storages, backup targets and templates.
 
-### Recommended Proxmox role configuration
+**Affected reads:** `GET /cluster/lxc-template-storages`,
+`GET /cluster/vms/{node}/{type}/{vmid}/backups` (storage/backup listing).
 
-Grant `Datastore.Audit` on `/storage` to the operator token:
+**Workaround in the code:** these endpoints use an **admin → operator → viewer** token
+fallback as a safety net, so listing still works even on nodes whose viewer token was
+set up before `Datastore.Audit` was added to the role.
+
+### Older installations
+
+If a node was set up with a viewer role that predates `Datastore.Audit`, re-apply the
+role definition (matches the wizard / node modal output):
 
 ```
-pveum aclmod /storage --roles PVEDatastoreUser --token portal-operator@pve!portal-operator
+pveum role modify PortalViewer --privs "VM.Audit,VM.GuestAgent.Audit,Pool.Audit,Sys.Audit,Datastore.Audit"
 ```
 
 This removes the need for the admin token for storage listing.

@@ -1018,7 +1018,12 @@ async def get_vm_backups(
     vmid: int,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> VmBackupsResponse:
-    client, auth = await _get_client_auth_for_node(current_user, node)
+    # Backup/storage reads hit /nodes/{node}/storage which needs Datastore.Audit –
+    # viewer/operator lack it by default and Proxmox returns an empty list (no 403).
+    # Use the admin→operator→viewer fallback (mirrors lxc-template-storages).
+    client, auth = await _get_client_auth_for_node(
+        current_user, node, roles=("admin", "operator", "viewer")
+    )
     await _check_detail_access(current_user, vmid, vm_type, node)
     try:
         storages = await client.get_node_backup_storages(auth, node)
@@ -1479,12 +1484,19 @@ async def get_portal_nodes(
 async def _get_client_auth_for_node(
     current_user: CurrentUser,
     proxmox_node: str,
+    roles: tuple[str, ...] = ("viewer",),
 ) -> tuple[ProxmoxClient, ProxmoxAuth]:
     """Resolve ProxmoxClient + ProxmoxAuth for read operations on a specific Proxmox node.
 
     For proxmox-login users their session cookie is valid across the whole cluster.
     For local users we look up which portal node manages the given Proxmox node and
-    extract the viewer token from it.
+    extract a service-account token from it.
+
+    *roles* is the ordered fallback chain of token roles to try; it defaults to
+    viewer-only. Reads that hit ``/nodes/{node}/storage`` require ``Datastore.Audit``
+    (which viewer/operator lack by default, yielding a silent empty list instead of a
+    403) and should pass ``("admin", "operator", "viewer")`` – mirroring the fallback
+    already used by ``lxc-template-storages`` / iso_service.
     """
     if current_user.auth_type == "proxmox":
         session = proxmox_client.get_session(current_user.username)
@@ -1506,11 +1518,15 @@ async def _get_client_auth_for_node(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="No Proxmox node configured",
         )
-    token = _extract_token(node_row, "viewer")
+    token = None
+    for _role in roles:
+        token = _extract_token(node_row, _role)
+        if token:
+            break
     if not token:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Viewer service account not configured for this node",
+            detail=f"No {'/'.join(roles)} service account configured for this node",
         )
     client = ProxmoxClient(base_url=node_row.url, verify_ssl=node_row.verify_ssl)
     auth = ProxmoxAuth(kind="token", value=token.token_id, secret=token.token_secret)
